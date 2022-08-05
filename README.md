@@ -4,7 +4,6 @@ The JavaScript reference implementation for GraphQL, a query language for APIs c
 
 [![npm version](https://badge.fury.io/js/graphql.svg)](https://badge.fury.io/js/graphql)
 [![Build Status](https://github.com/graphql/graphql-js/workflows/CI/badge.svg?branch=main)](https://github.com/graphql/graphql-js/actions?query=branch%3Amain)
-[![Coverage Status](https://codecov.io/gh/graphql/graphql-js/branch/main/graph/badge.svg)](https://codecov.io/gh/graphql/graphql-js)
 
 See more complete documentation at https://graphql.org/ and
 https://graphql.org/graphql-js/.
@@ -71,9 +70,9 @@ or an array of promises. A more complex example is included in the top-level [te
 Then, serve the result of a query against that type schema.
 
 ```js
-var query = '{ hello }';
+var source = '{ hello }';
 
-graphql(schema, query).then((result) => {
+graphql({ schema, source }).then((result) => {
   // Prints
   // {
   //   data: { hello: "world" }
@@ -87,9 +86,9 @@ first ensure the query is syntactically and semantically valid before executing
 it, reporting errors otherwise.
 
 ```js
-var query = '{ BoyHowdy }';
+var source = '{ BoyHowdy }';
 
-graphql(schema, query).then((result) => {
+graphql({ schema, source }).then((result) => {
   // Prints
   // {
   //   errors: [
@@ -156,30 +155,3 @@ Changes are tracked as [GitHub releases](https://github.com/graphql/graphql-js/r
 ### License
 
 GraphQL.js is [MIT-licensed](./LICENSE).
-
-### Credits
-
-The `*.d.ts` files in this project are based on [DefinitelyTyped](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/54712a7e28090c5b1253b746d1878003c954f3ff/types/graphql) definitions written by:
-
-<!--- spell-checker:disable -->
-
-- TonyYang https://github.com/TonyPythoneer
-- Caleb Meredith https://github.com/calebmer
-- Dominic Watson https://github.com/intellix
-- Firede https://github.com/firede
-- Kepennar https://github.com/kepennar
-- Mikhail Novikov https://github.com/freiksenet
-- Ivan Goncharov https://github.com/IvanGoncharov
-- Hagai Cohen https://github.com/DxCx
-- Ricardo Portugal https://github.com/rportugal
-- Tim Griesser https://github.com/tgriesser
-- Dylan Stewart https://github.com/dyst5422
-- Alessio Dionisi https://github.com/adnsio
-- Divyendu Singh https://github.com/divyenduz
-- Brad Zacher https://github.com/bradzacher
-- Curtis Layne https://github.com/clayne11
-- Jonathan Cardoso https://github.com/JCMais
-- Pavel Lang https://github.com/langpavel
-- Mark Caudill https://github.com/mc0
-- Martijn Walraven https://github.com/martijnwalraven
-- Jed Mao https://github.com/jedmao

@@ -1,35 +1,36 @@
 import { inspect } from '../jsutils/inspect.ts';
 import { invariant } from '../jsutils/invariant.ts';
 import type { Maybe } from '../jsutils/Maybe.ts';
+import { isPrintableAsBlockString } from '../language/blockString.ts';
+import { Kind } from '../language/kinds.ts';
 import { print } from '../language/printer.ts';
-import { printBlockString } from '../language/blockString.ts';
-import type { GraphQLSchema } from '../type/schema.ts';
-import type { GraphQLDirective } from '../type/directives.ts';
 import type {
-  GraphQLNamedType,
   GraphQLArgument,
-  GraphQLInputField,
-  GraphQLScalarType,
   GraphQLEnumType,
-  GraphQLObjectType,
-  GraphQLInterfaceType,
-  GraphQLUnionType,
+  GraphQLInputField,
   GraphQLInputObjectType,
+  GraphQLInterfaceType,
+  GraphQLNamedType,
+  GraphQLObjectType,
+  GraphQLScalarType,
+  GraphQLUnionType,
 } from '../type/definition.ts';
-import { isIntrospectionType } from '../type/introspection.ts';
-import { isSpecifiedScalarType } from '../type/scalars.ts';
+import {
+  isEnumType,
+  isInputObjectType,
+  isInterfaceType,
+  isObjectType,
+  isScalarType,
+  isUnionType,
+} from '../type/definition.ts';
+import type { GraphQLDirective } from '../type/directives.ts';
 import {
   DEFAULT_DEPRECATION_REASON,
   isSpecifiedDirective,
 } from '../type/directives.ts';
-import {
-  isScalarType,
-  isObjectType,
-  isInterfaceType,
-  isUnionType,
-  isEnumType,
-  isInputObjectType,
-} from '../type/definition.ts';
+import { isIntrospectionType } from '../type/introspection.ts';
+import { isSpecifiedScalarType } from '../type/scalars.ts';
+import type { GraphQLSchema } from '../type/schema.ts';
 import { astFromValue } from './astFromValue.ts';
 export function printSchema(schema: GraphQLSchema): string {
   return printFilteredSchema(
@@ -41,11 +42,9 @@ export function printSchema(schema: GraphQLSchema): string {
 export function printIntrospectionSchema(schema: GraphQLSchema): string {
   return printFilteredSchema(schema, isSpecifiedDirective, isIntrospectionType);
 }
-
 function isDefinedType(type: GraphQLNamedType): boolean {
   return !isSpecifiedScalarType(type) && !isIntrospectionType(type);
 }
-
 function printFilteredSchema(
   schema: GraphQLSchema,
   directiveFilter: (type: GraphQLDirective) => boolean,
@@ -61,31 +60,23 @@ function printFilteredSchema(
     .filter(Boolean)
     .join('\n\n');
 }
-
 function printSchemaDefinition(schema: GraphQLSchema): Maybe<string> {
   if (schema.description == null && isSchemaOfCommonNames(schema)) {
     return;
   }
-
   const operationTypes = [];
   const queryType = schema.getQueryType();
-
   if (queryType) {
     operationTypes.push(`  query: ${queryType.name}`);
   }
-
   const mutationType = schema.getMutationType();
-
   if (mutationType) {
     operationTypes.push(`  mutation: ${mutationType.name}`);
   }
-
   const subscriptionType = schema.getSubscriptionType();
-
   if (subscriptionType) {
     operationTypes.push(`  subscription: ${subscriptionType.name}`);
   }
-
   return printDescription(schema) + `schema {\n${operationTypes.join('\n')}\n}`;
 }
 /**
@@ -93,71 +84,59 @@ function printSchemaDefinition(schema: GraphQLSchema): Maybe<string> {
  * the same as any other type and can be named in any manner, however there is
  * a common naming convention:
  *
+ * ```graphql
  *   schema {
  *     query: Query
  *     mutation: Mutation
  *     subscription: Subscription
  *   }
+ * ```
  *
  * When using this naming convention, the schema description can be omitted.
  */
-
 function isSchemaOfCommonNames(schema: GraphQLSchema): boolean {
   const queryType = schema.getQueryType();
-
   if (queryType && queryType.name !== 'Query') {
     return false;
   }
-
   const mutationType = schema.getMutationType();
-
   if (mutationType && mutationType.name !== 'Mutation') {
     return false;
   }
-
   const subscriptionType = schema.getSubscriptionType();
-
   if (subscriptionType && subscriptionType.name !== 'Subscription') {
     return false;
   }
-
   return true;
 }
-
 export function printType(type: GraphQLNamedType): string {
   if (isScalarType(type)) {
     return printScalar(type);
   }
-
   if (isObjectType(type)) {
     return printObject(type);
   }
-
   if (isInterfaceType(type)) {
     return printInterface(type);
   }
-
   if (isUnionType(type)) {
     return printUnion(type);
   }
-
   if (isEnumType(type)) {
     return printEnum(type);
-  } // istanbul ignore else (See: 'https://github.com/graphql/graphql-js/issues/2618')
-
+  }
   if (isInputObjectType(type)) {
     return printInputObject(type);
-  } // istanbul ignore next (Not reachable. All possible types have been considered)
-
+  }
+  /* c8 ignore next 3 */
+  // Not reachable, all possible types have been considered.
   false || invariant(false, 'Unexpected type: ' + inspect(type));
 }
-
 function printScalar(type: GraphQLScalarType): string {
   return (
     printDescription(type) + `scalar ${type.name}` + printSpecifiedByURL(type)
   );
 }
-
 function printImplementedInterfaces(
   type: GraphQLObjectType | GraphQLInterfaceType,
 ): string {
@@ -166,7 +145,6 @@ function printImplementedInterfaces(
     ? ' implements ' + interfaces.map((i) => i.name).join(' & ')
     : '';
 }
-
 function printObject(type: GraphQLObjectType): string {
   return (
     printDescription(type) +
@@ -175,7 +153,6 @@ function printObject(type: GraphQLObjectType): string {
     printFields(type)
   );
 }
-
 function printInterface(type: GraphQLInterfaceType): string {
   return (
     printDescription(type) +
@@ -184,13 +161,11 @@ function printInterface(type: GraphQLInterfaceType): string {
     printFields(type)
   );
 }
-
 function printUnion(type: GraphQLUnionType): string {
   const types = type.getTypes();
   const possibleTypes = types.length ? ' = ' + types.join(' | ') : '';
   return printDescription(type) + 'union ' + type.name + possibleTypes;
 }
-
 function printEnum(type: GraphQLEnumType): string {
   const values = type
     .getValues()
@@ -203,14 +178,12 @@ function printEnum(type: GraphQLEnumType): string {
     );
   return printDescription(type) + `enum ${type.name}` + printBlock(values);
 }
-
 function printInputObject(type: GraphQLInputObjectType): string {
   const fields = Object.values(type.getFields()).map(
     (f, i) => printDescription(f, '  ', !i) + '  ' + printInputValue(f),
   );
   return printDescription(type) + `input ${type.name}` + printBlock(fields);
 }
-
 function printFields(type: GraphQLObjectType | GraphQLInterfaceType): string {
   const fields = Object.values(type.getFields()).map(
     (f, i) =>
@@ -224,23 +197,20 @@ function printFields(type: GraphQLObjectType | GraphQLInterfaceType): string {
   );
   return printBlock(fields);
 }
-
 function printBlock(items: ReadonlyArray<string>): string {
   return items.length !== 0 ? ' {\n' + items.join('\n') + '\n}' : '';
 }
-
 function printArgs(
   args: ReadonlyArray<GraphQLArgument>,
   indentation: string = '',
 ): string {
   if (args.length === 0) {
     return '';
-  } // If every arg does not have a description, print them on one line.
-
+  }
+  // If every arg does not have a description, print them on one line.
   if (args.every((arg) => !arg.description)) {
     return '(' + args.map(printInputValue).join(', ') + ')';
   }
-
   return (
     '(\n' +
     args
@@ -257,18 +227,14 @@ function printArgs(
     ')'
   );
 }
-
 function printInputValue(arg: GraphQLInputField): string {
   const defaultAST = astFromValue(arg.defaultValue, arg.type);
   let argDecl = arg.name + ': ' + String(arg.type);
-
   if (defaultAST) {
     argDecl += ` = ${print(defaultAST)}`;
   }
-
   return argDecl + printDeprecated(arg.deprecationReason);
 }
-
 function printDirective(directive: GraphQLDirective): string {
   return (
     printDescription(directive) +
@@ -280,35 +246,26 @@ function printDirective(directive: GraphQLDirective): string {
     directive.locations.join(' | ')
   );
 }
-
 function printDeprecated(reason: Maybe<string>): string {
   if (reason == null) {
     return '';
   }
-
   if (reason !== DEFAULT_DEPRECATION_REASON) {
-    const astValue = print({
-      kind: 'StringValue',
-      value: reason,
-    });
+    const astValue = print({ kind: Kind.STRING, value: reason });
     return ` @deprecated(reason: ${astValue})`;
   }
-
   return ' @deprecated';
 }
-
 function printSpecifiedByURL(scalar: GraphQLScalarType): string {
   if (scalar.specifiedByURL == null) {
     return '';
   }
-
   const astValue = print({
-    kind: 'StringValue',
+    kind: Kind.STRING,
     value: scalar.specifiedByURL,
   });
   return ` @specifiedBy(url: ${astValue})`;
 }
-
 function printDescription(
   def: {
     readonly description: Maybe<string>;
@@ -317,13 +274,14 @@ function printDescription(
   firstInBlock: boolean = true,
 ): string {
   const { description } = def;
-
   if (description == null) {
     return '';
   }
-
-  const preferMultipleLines = description.length > 70;
-  const blockString = printBlockString(description, preferMultipleLines);
+  const blockString = print({
+    kind: Kind.STRING,
+    value: description,
+    block: isPrintableAsBlockString(description),
+  });
   const prefix =
     indentation && !firstInBlock ? '\n' + indentation : indentation;
   return prefix + blockString.replace(/\n/g, '\n' + indentation) + '\n';

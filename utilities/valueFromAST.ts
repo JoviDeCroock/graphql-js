@@ -1,17 +1,17 @@
-import type { ObjMap } from '../jsutils/ObjMap.ts';
-import { keyMap } from '../jsutils/keyMap.ts';
 import { inspect } from '../jsutils/inspect.ts';
 import { invariant } from '../jsutils/invariant.ts';
+import { keyMap } from '../jsutils/keyMap.ts';
+import type { Maybe } from '../jsutils/Maybe.ts';
+import type { ObjMap } from '../jsutils/ObjMap.ts';
 import type { ValueNode } from '../language/ast.ts';
 import { Kind } from '../language/kinds.ts';
 import type { GraphQLInputType } from '../type/definition.ts';
 import {
-  isLeafType,
   isInputObjectType,
+  isLeafType,
   isListType,
   isNonNullType,
 } from '../type/definition.ts';
-import type { Maybe } from '../jsutils/Maybe.ts';
 /**
  * Produces a JavaScript value given a GraphQL Value AST.
  *
@@ -32,7 +32,6 @@ import type { Maybe } from '../jsutils/Maybe.ts';
  * | NullValue            | null          |
  *
  */
-
 export function valueFromAST(
   valueNode: Maybe<ValueNode>,
   type: GraphQLInputType,
@@ -43,45 +42,35 @@ export function valueFromAST(
     // Importantly, this is different from returning the value null.
     return;
   }
-
   if (valueNode.kind === Kind.VARIABLE) {
     const variableName = valueNode.name.value;
-
     if (variables == null || variables[variableName] === undefined) {
       // No valid return value.
       return;
     }
-
     const variableValue = variables[variableName];
-
     if (variableValue === null && isNonNullType(type)) {
       return; // Invalid: intentionally return no value.
-    } // Note: This does no further checking that this variable is correct.
+    }
+    // Note: This does no further checking that this variable is correct.
     // This assumes that this query has been validated and the variable
     // usage here is of the correct type.
-
     return variableValue;
   }
-
   if (isNonNullType(type)) {
     if (valueNode.kind === Kind.NULL) {
       return; // Invalid: intentionally return no value.
     }
-
     return valueFromAST(valueNode, type.ofType, variables);
   }
-
   if (valueNode.kind === Kind.NULL) {
     // This is explicitly returning the value null.
     return null;
   }
-
   if (isListType(type)) {
     const itemType = type.ofType;
-
     if (valueNode.kind === Kind.LIST) {
       const coercedValues = [];
-
       for (const itemNode of valueNode.values) {
         if (isMissingVariable(itemNode, variables)) {
           // If an array contains a missing variable, it is either coerced to
@@ -89,87 +78,68 @@ export function valueFromAST(
           if (isNonNullType(itemType)) {
             return; // Invalid: intentionally return no value.
           }
-
           coercedValues.push(null);
         } else {
           const itemValue = valueFromAST(itemNode, itemType, variables);
-
           if (itemValue === undefined) {
             return; // Invalid: intentionally return no value.
           }
-
           coercedValues.push(itemValue);
         }
       }
-
       return coercedValues;
     }
-
     const coercedValue = valueFromAST(valueNode, itemType, variables);
-
     if (coercedValue === undefined) {
       return; // Invalid: intentionally return no value.
     }
-
     return [coercedValue];
   }
-
   if (isInputObjectType(type)) {
     if (valueNode.kind !== Kind.OBJECT) {
       return; // Invalid: intentionally return no value.
     }
-
     const coercedObj = Object.create(null);
     const fieldNodes = keyMap(valueNode.fields, (field) => field.name.value);
-
     for (const field of Object.values(type.getFields())) {
       const fieldNode = fieldNodes[field.name];
-
       if (!fieldNode || isMissingVariable(fieldNode.value, variables)) {
         if (field.defaultValue !== undefined) {
           coercedObj[field.name] = field.defaultValue;
         } else if (isNonNullType(field.type)) {
           return; // Invalid: intentionally return no value.
         }
-
         continue;
       }
-
       const fieldValue = valueFromAST(fieldNode.value, field.type, variables);
-
       if (fieldValue === undefined) {
         return; // Invalid: intentionally return no value.
       }
-
       coercedObj[field.name] = fieldValue;
     }
-
     return coercedObj;
-  } // istanbul ignore else (See: 'https://github.com/graphql/graphql-js/issues/2618')
-
+  }
   if (isLeafType(type)) {
     // Scalars and Enums fulfill parsing a literal value via parseLiteral().
     // Invalid values represent a failure to parse correctly, in which case
     // no value is returned.
     let result;
-
     try {
       result = type.parseLiteral(valueNode, variables);
     } catch (_error) {
       return; // Invalid: intentionally return no value.
     }
-
     if (result === undefined) {
       return; // Invalid: intentionally return no value.
     }
-
     return result;
-  } // istanbul ignore next (Not reachable. All possible input types have been considered)
-
+  }
+  /* c8 ignore next 3 */
+  // Not reachable, all possible input types have been considered.
   false || invariant(false, 'Unexpected input type: ' + inspect(type));
-} // Returns true if the provided valueNode is a variable which is not defined
+}
+// Returns true if the provided valueNode is a variable which is not defined
 // in the set of variables.
-
 function isMissingVariable(
   valueNode: ValueNode,
   variables: Maybe<ObjMap<unknown>>,

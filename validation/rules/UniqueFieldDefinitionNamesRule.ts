@@ -1,15 +1,15 @@
 import { GraphQLError } from '../../error/GraphQLError.ts';
-import type { ASTVisitor } from '../../language/visitor.ts';
 import type {
-  NameNode,
   FieldDefinitionNode,
   InputValueDefinitionNode,
+  NameNode,
 } from '../../language/ast.ts';
+import type { ASTVisitor } from '../../language/visitor.ts';
 import type { GraphQLNamedType } from '../../type/definition.ts';
 import {
-  isObjectType,
-  isInterfaceType,
   isInputObjectType,
+  isInterfaceType,
+  isObjectType,
 } from '../../type/definition.ts';
 import type { SDLValidationContext } from '../ValidationContext.ts';
 /**
@@ -17,7 +17,6 @@ import type { SDLValidationContext } from '../ValidationContext.ts';
  *
  * A GraphQL complex type is only valid if all its fields are uniquely named.
  */
-
 export function UniqueFieldDefinitionNamesRule(
   context: SDLValidationContext,
 ): ASTVisitor {
@@ -32,52 +31,46 @@ export function UniqueFieldDefinitionNamesRule(
     ObjectTypeDefinition: checkFieldUniqueness,
     ObjectTypeExtension: checkFieldUniqueness,
   };
-
   function checkFieldUniqueness(node: {
     readonly name: NameNode;
-    readonly fields?: ReadonlyArray<
-      InputValueDefinitionNode | FieldDefinitionNode
-    >;
+    readonly fields?:
+      | ReadonlyArray<InputValueDefinitionNode | FieldDefinitionNode>
+      | undefined;
   }) {
     const typeName = node.name.value;
-
     if (!knownFieldNames[typeName]) {
       knownFieldNames[typeName] = Object.create(null);
-    } // istanbul ignore next (See: 'https://github.com/graphql/graphql-js/issues/2203')
-
+    }
+    // FIXME: https://github.com/graphql/graphql-js/issues/2203
+    /* c8 ignore next */
     const fieldNodes = node.fields ?? [];
     const fieldNames = knownFieldNames[typeName];
-
     for (const fieldDef of fieldNodes) {
       const fieldName = fieldDef.name.value;
-
       if (hasField(existingTypeMap[typeName], fieldName)) {
         context.reportError(
           new GraphQLError(
             `Field "${typeName}.${fieldName}" already exists in the schema. It cannot also be defined in this type extension.`,
-            fieldDef.name,
+            { nodes: fieldDef.name },
           ),
         );
       } else if (fieldNames[fieldName]) {
         context.reportError(
           new GraphQLError(
             `Field "${typeName}.${fieldName}" can only be defined once.`,
-            [fieldNames[fieldName], fieldDef.name],
+            { nodes: [fieldNames[fieldName], fieldDef.name] },
           ),
         );
       } else {
         fieldNames[fieldName] = fieldDef.name;
       }
     }
-
     return false;
   }
 }
-
 function hasField(type: GraphQLNamedType, fieldName: string): boolean {
   if (isObjectType(type) || isInterfaceType(type) || isInputObjectType(type)) {
     return type.getFields()[fieldName] != null;
   }
-
   return false;
 }
