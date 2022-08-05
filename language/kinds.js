@@ -1,81 +1,64 @@
-'use strict';
-
-Object.defineProperty(exports, '__esModule', {
-  value: true,
-});
-exports.Kind = void 0;
-
 /**
  * The set of allowed kind values for AST nodes.
  */
-const Kind = Object.freeze({
+export var Kind;
+(function (Kind) {
   /** Name */
-  NAME: 'Name',
-
+  Kind['NAME'] = 'Name';
   /** Document */
-  DOCUMENT: 'Document',
-  OPERATION_DEFINITION: 'OperationDefinition',
-  VARIABLE_DEFINITION: 'VariableDefinition',
-  SELECTION_SET: 'SelectionSet',
-  FIELD: 'Field',
-  ARGUMENT: 'Argument',
-
+  Kind['DOCUMENT'] = 'Document';
+  Kind['OPERATION_DEFINITION'] = 'OperationDefinition';
+  Kind['VARIABLE_DEFINITION'] = 'VariableDefinition';
+  Kind['SELECTION_SET'] = 'SelectionSet';
+  Kind['FIELD'] = 'Field';
+  Kind['ARGUMENT'] = 'Argument';
+  /** Nullability Modifiers */
+  Kind['LIST_NULLABILITY_OPERATOR'] = 'ListNullabilityOperator';
+  Kind['NON_NULL_ASSERTION'] = 'NonNullAssertion';
+  Kind['ERROR_BOUNDARY'] = 'ErrorBoundary';
   /** Fragments */
-  FRAGMENT_SPREAD: 'FragmentSpread',
-  INLINE_FRAGMENT: 'InlineFragment',
-  FRAGMENT_DEFINITION: 'FragmentDefinition',
-
+  Kind['FRAGMENT_SPREAD'] = 'FragmentSpread';
+  Kind['INLINE_FRAGMENT'] = 'InlineFragment';
+  Kind['FRAGMENT_DEFINITION'] = 'FragmentDefinition';
   /** Values */
-  VARIABLE: 'Variable',
-  INT: 'IntValue',
-  FLOAT: 'FloatValue',
-  STRING: 'StringValue',
-  BOOLEAN: 'BooleanValue',
-  NULL: 'NullValue',
-  ENUM: 'EnumValue',
-  LIST: 'ListValue',
-  OBJECT: 'ObjectValue',
-  OBJECT_FIELD: 'ObjectField',
-
+  Kind['VARIABLE'] = 'Variable';
+  Kind['INT'] = 'IntValue';
+  Kind['FLOAT'] = 'FloatValue';
+  Kind['STRING'] = 'StringValue';
+  Kind['BOOLEAN'] = 'BooleanValue';
+  Kind['NULL'] = 'NullValue';
+  Kind['ENUM'] = 'EnumValue';
+  Kind['LIST'] = 'ListValue';
+  Kind['OBJECT'] = 'ObjectValue';
+  Kind['OBJECT_FIELD'] = 'ObjectField';
   /** Directives */
-  DIRECTIVE: 'Directive',
-
+  Kind['DIRECTIVE'] = 'Directive';
   /** Types */
-  NAMED_TYPE: 'NamedType',
-  LIST_TYPE: 'ListType',
-  NON_NULL_TYPE: 'NonNullType',
-
+  Kind['NAMED_TYPE'] = 'NamedType';
+  Kind['LIST_TYPE'] = 'ListType';
+  Kind['NON_NULL_TYPE'] = 'NonNullType';
   /** Type System Definitions */
-  SCHEMA_DEFINITION: 'SchemaDefinition',
-  OPERATION_TYPE_DEFINITION: 'OperationTypeDefinition',
-
+  Kind['SCHEMA_DEFINITION'] = 'SchemaDefinition';
+  Kind['OPERATION_TYPE_DEFINITION'] = 'OperationTypeDefinition';
   /** Type Definitions */
-  SCALAR_TYPE_DEFINITION: 'ScalarTypeDefinition',
-  OBJECT_TYPE_DEFINITION: 'ObjectTypeDefinition',
-  FIELD_DEFINITION: 'FieldDefinition',
-  INPUT_VALUE_DEFINITION: 'InputValueDefinition',
-  INTERFACE_TYPE_DEFINITION: 'InterfaceTypeDefinition',
-  UNION_TYPE_DEFINITION: 'UnionTypeDefinition',
-  ENUM_TYPE_DEFINITION: 'EnumTypeDefinition',
-  ENUM_VALUE_DEFINITION: 'EnumValueDefinition',
-  INPUT_OBJECT_TYPE_DEFINITION: 'InputObjectTypeDefinition',
-
+  Kind['SCALAR_TYPE_DEFINITION'] = 'ScalarTypeDefinition';
+  Kind['OBJECT_TYPE_DEFINITION'] = 'ObjectTypeDefinition';
+  Kind['FIELD_DEFINITION'] = 'FieldDefinition';
+  Kind['INPUT_VALUE_DEFINITION'] = 'InputValueDefinition';
+  Kind['INTERFACE_TYPE_DEFINITION'] = 'InterfaceTypeDefinition';
+  Kind['UNION_TYPE_DEFINITION'] = 'UnionTypeDefinition';
+  Kind['ENUM_TYPE_DEFINITION'] = 'EnumTypeDefinition';
+  Kind['ENUM_VALUE_DEFINITION'] = 'EnumValueDefinition';
+  Kind['INPUT_OBJECT_TYPE_DEFINITION'] = 'InputObjectTypeDefinition';
   /** Directive Definitions */
-  DIRECTIVE_DEFINITION: 'DirectiveDefinition',
-
+  Kind['DIRECTIVE_DEFINITION'] = 'DirectiveDefinition';
   /** Type System Extensions */
-  SCHEMA_EXTENSION: 'SchemaExtension',
-
+  Kind['SCHEMA_EXTENSION'] = 'SchemaExtension';
   /** Type Extensions */
-  SCALAR_TYPE_EXTENSION: 'ScalarTypeExtension',
-  OBJECT_TYPE_EXTENSION: 'ObjectTypeExtension',
-  INTERFACE_TYPE_EXTENSION: 'InterfaceTypeExtension',
-  UNION_TYPE_EXTENSION: 'UnionTypeExtension',
-  ENUM_TYPE_EXTENSION: 'EnumTypeExtension',
-  INPUT_OBJECT_TYPE_EXTENSION: 'InputObjectTypeExtension',
-});
-/**
- * The enum type representing the possible kind values of AST nodes.
- */
-
-exports.Kind = Kind;
+  Kind['SCALAR_TYPE_EXTENSION'] = 'ScalarTypeExtension';
+  Kind['OBJECT_TYPE_EXTENSION'] = 'ObjectTypeExtension';
+  Kind['INTERFACE_TYPE_EXTENSION'] = 'InterfaceTypeExtension';
+  Kind['UNION_TYPE_EXTENSION'] = 'UnionTypeExtension';
+  Kind['ENUM_TYPE_EXTENSION'] = 'EnumTypeExtension';
+  Kind['INPUT_OBJECT_TYPE_EXTENSION'] = 'InputObjectTypeExtension';
+})(Kind || (Kind = {}));

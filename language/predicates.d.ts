@@ -1,21 +1,25 @@
 import type {
   ASTNode,
+  ConstValueNode,
   DefinitionNode,
   ExecutableDefinitionNode,
+  NullabilityAssertionNode,
   SelectionNode,
-  ValueNode,
-  ConstValueNode,
+  TypeDefinitionNode,
+  TypeExtensionNode,
   TypeNode,
   TypeSystemDefinitionNode,
-  TypeDefinitionNode,
   TypeSystemExtensionNode,
-  TypeExtensionNode,
+  ValueNode,
 } from './ast';
 export declare function isDefinitionNode(node: ASTNode): node is DefinitionNode;
 export declare function isExecutableDefinitionNode(
   node: ASTNode,
 ): node is ExecutableDefinitionNode;
 export declare function isSelectionNode(node: ASTNode): node is SelectionNode;
+export declare function isNullabilityAssertionNode(
+  node: ASTNode,
+): node is NullabilityAssertionNode;
 export declare function isValueNode(node: ASTNode): node is ValueNode;
 export declare function isConstValueNode(node: ASTNode): node is ConstValueNode;
 export declare function isTypeNode(node: ASTNode): node is TypeNode;

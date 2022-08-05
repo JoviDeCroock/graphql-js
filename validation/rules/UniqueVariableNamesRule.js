@@ -1,36 +1,29 @@
-'use strict';
-
-Object.defineProperty(exports, '__esModule', {
-  value: true,
-});
-exports.UniqueVariableNamesRule = UniqueVariableNamesRule;
-
-var _GraphQLError = require('../../error/GraphQLError.js');
-
+import { groupBy } from '../../jsutils/groupBy.js';
+import { GraphQLError } from '../../error/GraphQLError.js';
 /**
  * Unique variable names
  *
  * A GraphQL operation is only valid if all its variables are uniquely named.
  */
-function UniqueVariableNamesRule(context) {
-  let knownVariableNames = Object.create(null);
+export function UniqueVariableNamesRule(context) {
   return {
-    OperationDefinition() {
-      knownVariableNames = Object.create(null);
-    },
-
-    VariableDefinition(node) {
-      const variableName = node.variable.name.value;
-
-      if (knownVariableNames[variableName]) {
-        context.reportError(
-          new _GraphQLError.GraphQLError(
-            `There can be only one variable named "$${variableName}".`,
-            [knownVariableNames[variableName], node.variable.name],
-          ),
-        );
-      } else {
-        knownVariableNames[variableName] = node.variable.name;
+    OperationDefinition(operationNode) {
+      // See: https://github.com/graphql/graphql-js/issues/2203
+      /* c8 ignore next */
+      const variableDefinitions = operationNode.variableDefinitions ?? [];
+      const seenVariableDefinitions = groupBy(
+        variableDefinitions,
+        (node) => node.variable.name.value,
+      );
+      for (const [variableName, variableNodes] of seenVariableDefinitions) {
+        if (variableNodes.length > 1) {
+          context.reportError(
+            new GraphQLError(
+              `There can be only one variable named "$${variableName}".`,
+              { nodes: variableNodes.map((node) => node.variable.name) },
+            ),
+          );
+        }
       }
     },
   };

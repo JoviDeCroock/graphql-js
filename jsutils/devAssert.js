@@ -1,14 +1,5 @@
-'use strict';
-
-Object.defineProperty(exports, '__esModule', {
-  value: true,
-});
-exports.devAssert = devAssert;
-
-function devAssert(condition, message) {
-  const booleanCondition = Boolean(condition); // istanbul ignore else (See transformation done in './resources/inlineInvariant.js')
-
-  if (!booleanCondition) {
+export function devAssert(condition, message) {
+  if (!condition) {
     throw new Error(message);
   }
 }

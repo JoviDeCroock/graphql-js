@@ -1,60 +1,60 @@
 import type { Maybe } from '../jsutils/Maybe';
 import type { GraphQLError } from '../error/GraphQLError';
-import type { TokenKindEnum } from './tokenKind';
 import type {
-  Token,
-  NameNode,
-  VariableNode,
-  DocumentNode,
-  DefinitionNode,
-  OperationDefinitionNode,
-  OperationTypeNode,
-  VariableDefinitionNode,
-  SelectionSetNode,
-  SelectionNode,
-  FieldNode,
   ArgumentNode,
   ConstArgumentNode,
+  ConstDirectiveNode,
+  ConstListValueNode,
+  ConstObjectFieldNode,
+  ConstObjectValueNode,
+  ConstValueNode,
+  DefinitionNode,
+  DirectiveDefinitionNode,
+  DirectiveNode,
+  DocumentNode,
+  EnumTypeDefinitionNode,
+  EnumTypeExtensionNode,
+  EnumValueDefinitionNode,
+  FieldDefinitionNode,
+  FieldNode,
+  FragmentDefinitionNode,
   FragmentSpreadNode,
   InlineFragmentNode,
-  FragmentDefinitionNode,
-  ValueNode,
-  ConstValueNode,
-  StringValueNode,
-  ListValueNode,
-  ConstListValueNode,
-  ObjectValueNode,
-  ConstObjectValueNode,
-  ObjectFieldNode,
-  ConstObjectFieldNode,
-  DirectiveNode,
-  ConstDirectiveNode,
-  TypeNode,
-  NamedTypeNode,
-  TypeSystemDefinitionNode,
-  SchemaDefinitionNode,
-  OperationTypeDefinitionNode,
-  ScalarTypeDefinitionNode,
-  ObjectTypeDefinitionNode,
-  FieldDefinitionNode,
+  InputObjectTypeDefinitionNode,
+  InputObjectTypeExtensionNode,
   InputValueDefinitionNode,
   InterfaceTypeDefinitionNode,
-  UnionTypeDefinitionNode,
-  EnumTypeDefinitionNode,
-  EnumValueDefinitionNode,
-  InputObjectTypeDefinitionNode,
-  DirectiveDefinitionNode,
-  TypeSystemExtensionNode,
-  SchemaExtensionNode,
-  ScalarTypeExtensionNode,
-  ObjectTypeExtensionNode,
   InterfaceTypeExtensionNode,
+  ListValueNode,
+  NamedTypeNode,
+  NameNode,
+  NullabilityAssertionNode,
+  ObjectFieldNode,
+  ObjectTypeDefinitionNode,
+  ObjectTypeExtensionNode,
+  ObjectValueNode,
+  OperationDefinitionNode,
+  OperationTypeDefinitionNode,
+  ScalarTypeDefinitionNode,
+  ScalarTypeExtensionNode,
+  SchemaDefinitionNode,
+  SchemaExtensionNode,
+  SelectionNode,
+  SelectionSetNode,
+  StringValueNode,
+  Token,
+  TypeNode,
+  TypeSystemExtensionNode,
+  UnionTypeDefinitionNode,
   UnionTypeExtensionNode,
-  EnumTypeExtensionNode,
-  InputObjectTypeExtensionNode,
+  ValueNode,
+  VariableDefinitionNode,
+  VariableNode,
 } from './ast';
-import { Location } from './ast';
+import { Location, OperationTypeNode } from './ast';
+import { Lexer } from './lexer';
 import { Source } from './source';
+import { TokenKind } from './tokenKind';
 /**
  * Configuration options to control parser behavior
  */
@@ -64,7 +64,7 @@ export interface ParseOptions {
    * in the source that they correspond to. This configuration flag
    * disables that behavior for performance or testing.
    */
-  noLocation?: boolean;
+  noLocation?: boolean | undefined;
   /**
    * @deprecated will be removed in the v17.0.0
    *
@@ -74,12 +74,35 @@ export interface ParseOptions {
    *
    * The syntax is identical to normal, query-defined variables. For example:
    *
-   *   fragment A($var: Boolean = false) on T  {
-   *     ...
-   *   }
-   *
+   * ```graphql
+   * fragment A($var: Boolean = false) on T {
+   *   ...
+   * }
+   * ```
    */
-  allowLegacyFragmentVariables?: boolean;
+  allowLegacyFragmentVariables?: boolean | undefined;
+  /**
+   * EXPERIMENTAL:
+   *
+   * If enabled, the parser will understand and parse Client Controlled Nullability
+   * Designators contained in Fields. They'll be represented in the
+   * `nullabilityAssertion` field of the FieldNode.
+   *
+   * The syntax looks like the following:
+   *
+   * ```graphql
+   *   {
+   *     nullableField!
+   *     nonNullableField?
+   *     nonNullableSelectionSet? {
+   *       childField!
+   *     }
+   *   }
+   * ```
+   * Note: this feature is experimental and may change or be removed in the
+   * future.
+   */
+  experimentalClientControlledNullability?: boolean | undefined;
 }
 /**
  * Given a GraphQL source, parses it into a Document.
@@ -87,7 +110,7 @@ export interface ParseOptions {
  */
 export declare function parse(
   source: string | Source,
-  options?: ParseOptions,
+  options?: ParseOptions | undefined,
 ): DocumentNode;
 /**
  * Given a string containing a GraphQL value (ex. `[42]`), parse the AST for
@@ -101,7 +124,7 @@ export declare function parse(
  */
 export declare function parseValue(
   source: string | Source,
-  options?: ParseOptions,
+  options?: ParseOptions | undefined,
 ): ValueNode;
 /**
  * Similar to parseValue(), but raises a parse error if it encounters a
@@ -109,7 +132,7 @@ export declare function parseValue(
  */
 export declare function parseConstValue(
   source: string | Source,
-  options?: ParseOptions,
+  options?: ParseOptions | undefined,
 ): ConstValueNode;
 /**
  * Given a string containing a GraphQL Type (ex. `[Int!]`), parse the AST for
@@ -123,7 +146,7 @@ export declare function parseConstValue(
  */
 export declare function parseType(
   source: string | Source,
-  options?: ParseOptions,
+  options?: ParseOptions | undefined,
 ): TypeNode;
 /**
  * This class is exported only to assist people in implementing their own parsers
@@ -137,8 +160,8 @@ export declare function parseType(
  * @internal
  */
 export declare class Parser {
-  private _options;
-  private _lexer;
+  protected _options: ParseOptions;
+  protected _lexer: Lexer;
   constructor(source: string | Source, options?: ParseOptions);
   /**
    * Converts a name lex token into a name parse node.
@@ -157,6 +180,19 @@ export declare class Parser {
    * ExecutableDefinition :
    *   - OperationDefinition
    *   - FragmentDefinition
+   *
+   * TypeSystemDefinition :
+   *   - SchemaDefinition
+   *   - TypeDefinition
+   *   - DirectiveDefinition
+   *
+   * TypeDefinition :
+   *   - ScalarTypeDefinition
+   *   - ObjectTypeDefinition
+   *   - InterfaceTypeDefinition
+   *   - UnionTypeDefinition
+   *   - EnumTypeDefinition
+   *   - InputObjectTypeDefinition
    */
   parseDefinition(): DefinitionNode;
   /**
@@ -182,7 +218,9 @@ export declare class Parser {
    */
   parseVariable(): VariableNode;
   /**
+   * ```
    * SelectionSet : { Selection+ }
+   * ```
    */
   parseSelectionSet(): SelectionSetNode;
   /**
@@ -198,6 +236,7 @@ export declare class Parser {
    * Alias : Name :
    */
   parseField(): FieldNode;
+  parseNullabilityAssertion(): NullabilityAssertionNode | undefined;
   /**
    * Arguments[Const] : ( Argument[?Const]+ )
    */
@@ -258,9 +297,11 @@ export declare class Parser {
   parseList(isConst: true): ConstListValueNode;
   parseList(isConst: boolean): ListValueNode;
   /**
+   * ```
    * ObjectValue[Const] :
    *   - { }
    *   - { ObjectField[?Const]+ }
+   * ```
    */
   parseObject(isConst: true): ConstObjectValueNode;
   parseObject(isConst: boolean): ObjectValueNode;
@@ -276,7 +317,9 @@ export declare class Parser {
   parseDirectives(isConst: boolean): Array<DirectiveNode>;
   parseConstDirectives(): Array<ConstDirectiveNode>;
   /**
+   * ```
    * Directive[Const] : @ Name Arguments[?Const]?
+   * ```
    */
   parseDirective(isConst: true): ConstDirectiveNode;
   parseDirective(isConst: boolean): DirectiveNode;
@@ -291,28 +334,15 @@ export declare class Parser {
    * NamedType : Name
    */
   parseNamedType(): NamedTypeNode;
-  /**
-   * TypeSystemDefinition :
-   *   - SchemaDefinition
-   *   - TypeDefinition
-   *   - DirectiveDefinition
-   *
-   * TypeDefinition :
-   *   - ScalarTypeDefinition
-   *   - ObjectTypeDefinition
-   *   - InterfaceTypeDefinition
-   *   - UnionTypeDefinition
-   *   - EnumTypeDefinition
-   *   - InputObjectTypeDefinition
-   */
-  parseTypeSystemDefinition(): TypeSystemDefinitionNode;
   peekDescription(): boolean;
   /**
    * Description : StringValue
    */
   parseDescription(): undefined | StringValueNode;
   /**
+   * ```
    * SchemaDefinition : Description? schema Directives[Const]? { OperationTypeDefinition+ }
+   * ```
    */
   parseSchemaDefinition(): SchemaDefinitionNode;
   /**
@@ -336,7 +366,9 @@ export declare class Parser {
    */
   parseImplementsInterfaces(): Array<NamedTypeNode>;
   /**
+   * ```
    * FieldsDefinition : { FieldDefinition+ }
+   * ```
    */
   parseFieldsDefinition(): Array<FieldDefinitionNode>;
   /**
@@ -375,22 +407,28 @@ export declare class Parser {
    */
   parseEnumTypeDefinition(): EnumTypeDefinitionNode;
   /**
+   * ```
    * EnumValuesDefinition : { EnumValueDefinition+ }
+   * ```
    */
   parseEnumValuesDefinition(): Array<EnumValueDefinitionNode>;
   /**
    * EnumValueDefinition : Description? EnumValue Directives[Const]?
-   *
-   * EnumValue : Name
    */
   parseEnumValueDefinition(): EnumValueDefinitionNode;
+  /**
+   * EnumValue : Name but not `true`, `false` or `null`
+   */
+  parseEnumValueName(): NameNode;
   /**
    * InputObjectTypeDefinition :
    *   - Description? input Name Directives[Const]? InputFieldsDefinition?
    */
   parseInputObjectTypeDefinition(): InputObjectTypeDefinitionNode;
   /**
+   * ```
    * InputFieldsDefinition : { InputValueDefinition+ }
+   * ```
    */
   parseInputFieldsDefinition(): Array<InputValueDefinitionNode>;
   /**
@@ -408,9 +446,11 @@ export declare class Parser {
    */
   parseTypeSystemExtension(): TypeSystemExtensionNode;
   /**
+   * ```
    * SchemaExtension :
    *  - extend schema Directives[Const]? { OperationTypeDefinition+ }
    *  - extend schema Directives[Const]
+   * ```
    */
   parseSchemaExtension(): SchemaExtensionNode;
   /**
@@ -451,8 +491,10 @@ export declare class Parser {
    */
   parseInputObjectTypeExtension(): InputObjectTypeExtensionNode;
   /**
+   * ```
    * DirectiveDefinition :
    *   - Description? directive @ Name ArgumentsDefinition? `repeatable`? on DirectiveLocations
+   * ```
    */
   parseDirectiveDefinition(): DirectiveDefinitionNode;
   /**
@@ -469,23 +511,23 @@ export declare class Parser {
    */
   node<
     T extends {
-      loc?: Location;
+      loc?: Location | undefined;
     },
   >(startToken: Token, node: T): T;
   /**
    * Determines if the next token is of a given kind
    */
-  peek(kind: TokenKindEnum): boolean;
+  peek(kind: TokenKind): boolean;
   /**
    * If the next token is of the given kind, return that token after advancing the lexer.
    * Otherwise, do not change the parser state and throw an error.
    */
-  expectToken(kind: TokenKindEnum): Token;
+  expectToken(kind: TokenKind): Token;
   /**
-   * If the next token is of the given kind, return that token after advancing the lexer.
-   * Otherwise, do not change the parser state and return undefined.
+   * If the next token is of the given kind, return "true" after advancing the lexer.
+   * Otherwise, do not change the parser state and return "false".
    */
-  expectOptionalToken(kind: TokenKindEnum): Maybe<Token>;
+  expectOptionalToken(kind: TokenKind): boolean;
   /**
    * If the next token is a given keyword, advance the lexer.
    * Otherwise, do not change the parser state and throw an error.
@@ -505,11 +547,7 @@ export declare class Parser {
    * This list begins with a lex token of openKind and ends with a lex token of closeKind.
    * Advances the parser to the next lex token after the closing token.
    */
-  any<T>(
-    openKind: TokenKindEnum,
-    parseFn: () => T,
-    closeKind: TokenKindEnum,
-  ): Array<T>;
+  any<T>(openKind: TokenKind, parseFn: () => T, closeKind: TokenKind): Array<T>;
   /**
    * Returns a list of parse nodes, determined by the parseFn.
    * It can be empty only if open token is missing otherwise it will always return non-empty list
@@ -517,9 +555,9 @@ export declare class Parser {
    * Advances the parser to the next lex token after the closing token.
    */
   optionalMany<T>(
-    openKind: TokenKindEnum,
+    openKind: TokenKind,
     parseFn: () => T,
-    closeKind: TokenKindEnum,
+    closeKind: TokenKind,
   ): Array<T>;
   /**
    * Returns a non-empty list of parse nodes, determined by the parseFn.
@@ -527,14 +565,14 @@ export declare class Parser {
    * Advances the parser to the next lex token after the closing token.
    */
   many<T>(
-    openKind: TokenKindEnum,
+    openKind: TokenKind,
     parseFn: () => T,
-    closeKind: TokenKindEnum,
+    closeKind: TokenKind,
   ): Array<T>;
   /**
    * Returns a non-empty list of parse nodes, determined by the parseFn.
    * This list may begin with a lex token of delimiterKind followed by items separated by lex tokens of tokenKind.
    * Advances the parser to the next lex token after last item in the list.
    */
-  delimitedMany<T>(delimiterKind: TokenKindEnum, parseFn: () => T): Array<T>;
+  delimitedMany<T>(delimiterKind: TokenKind, parseFn: () => T): Array<T>;
 }

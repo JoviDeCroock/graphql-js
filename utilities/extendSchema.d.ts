@@ -1,7 +1,7 @@
 import type { DocumentNode } from '../language/ast';
 import type {
-  GraphQLSchemaValidationOptions,
   GraphQLSchemaNormalizedConfig,
+  GraphQLSchemaValidationOptions,
 } from '../type/schema';
 import { GraphQLSchema } from '../type/schema';
 interface Options extends GraphQLSchemaValidationOptions {
@@ -10,7 +10,7 @@ interface Options extends GraphQLSchemaValidationOptions {
    *
    * Default: false
    */
-  assumeValidSDL?: boolean;
+  assumeValidSDL?: boolean | undefined;
 }
 /**
  * Produces a new schema given an existing schema and a document which may

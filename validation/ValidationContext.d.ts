@@ -1,24 +1,24 @@
 import type { Maybe } from '../jsutils/Maybe';
 import type { GraphQLError } from '../error/GraphQLError';
-import type { ASTVisitor } from '../language/visitor';
 import type {
   DocumentNode,
-  OperationDefinitionNode,
-  VariableNode,
-  SelectionSetNode,
-  FragmentSpreadNode,
   FragmentDefinitionNode,
+  FragmentSpreadNode,
+  OperationDefinitionNode,
+  SelectionSetNode,
+  VariableNode,
 } from '../language/ast';
-import type { GraphQLSchema } from '../type/schema';
-import type { GraphQLDirective } from '../type/directives';
+import type { ASTVisitor } from '../language/visitor';
 import type {
+  GraphQLArgument,
+  GraphQLCompositeType,
+  GraphQLEnumValue,
+  GraphQLField,
   GraphQLInputType,
   GraphQLOutputType,
-  GraphQLCompositeType,
-  GraphQLField,
-  GraphQLArgument,
-  GraphQLEnumValue,
 } from '../type/definition';
+import type { GraphQLDirective } from '../type/directives';
+import type { GraphQLSchema } from '../type/schema';
 import { TypeInfo } from '../utilities/TypeInfo';
 declare type NodeWithSelectionSet =
   | OperationDefinitionNode
@@ -40,6 +40,7 @@ export declare class ASTValidationContext {
   private _fragmentSpreads;
   private _recursivelyReferencedFragments;
   constructor(ast: DocumentNode, onError: (error: GraphQLError) => void);
+  get [Symbol.toStringTag](): string;
   reportError(error: GraphQLError): void;
   getDocument(): DocumentNode;
   getFragment(name: string): Maybe<FragmentDefinitionNode>;
@@ -58,6 +59,7 @@ export declare class SDLValidationContext extends ASTValidationContext {
     schema: Maybe<GraphQLSchema>,
     onError: (error: GraphQLError) => void,
   );
+  get [Symbol.toStringTag](): string;
   getSchema(): Maybe<GraphQLSchema>;
 }
 export declare type SDLValidationRule = (
@@ -74,6 +76,7 @@ export declare class ValidationContext extends ASTValidationContext {
     typeInfo: TypeInfo,
     onError: (error: GraphQLError) => void,
   );
+  get [Symbol.toStringTag](): string;
   getSchema(): GraphQLSchema;
   getVariableUsages(node: NodeWithSelectionSet): ReadonlyArray<VariableUsage>;
   getRecursiveVariableUsages(

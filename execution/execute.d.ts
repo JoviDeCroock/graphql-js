@@ -1,24 +1,23 @@
-import type { Path } from '../jsutils/Path';
-import type { ObjMap } from '../jsutils/ObjMap';
-import type { PromiseOrValue } from '../jsutils/PromiseOrValue';
 import type { Maybe } from '../jsutils/Maybe';
-import type { GraphQLFormattedError } from '../error/formatError';
+import type { ObjMap } from '../jsutils/ObjMap';
+import type { Path } from '../jsutils/Path';
+import type { PromiseOrValue } from '../jsutils/PromiseOrValue';
+import type { GraphQLFormattedError } from '../error/GraphQLError';
 import { GraphQLError } from '../error/GraphQLError';
 import type {
   DocumentNode,
-  OperationDefinitionNode,
-  SelectionSetNode,
   FieldNode,
   FragmentDefinitionNode,
+  OperationDefinitionNode,
 } from '../language/ast';
-import type { GraphQLSchema } from '../type/schema';
 import type {
-  GraphQLObjectType,
   GraphQLField,
   GraphQLFieldResolver,
+  GraphQLObjectType,
   GraphQLResolveInfo,
   GraphQLTypeResolver,
 } from '../type/definition';
+import type { GraphQLSchema } from '../type/schema';
 /**
  * Terminology
  *
@@ -34,9 +33,9 @@ import type {
  *
  * "Selections" are the definitions that can appear legally and at
  * single level of the query. These include:
- * 1) field references e.g "a"
- * 2) fragment "spreads" e.g. "...c"
- * 3) inline fragment "spreads" e.g. "...on Type { a }"
+ * 1) field references e.g `a`
+ * 2) fragment "spreads" e.g. `...c`
+ * 3) inline fragment "spreads" e.g. `...on Type { a }`
  */
 /**
  * Data that must be available at all points during query execution.
@@ -55,6 +54,7 @@ export interface ExecutionContext {
   };
   fieldResolver: GraphQLFieldResolver<any, any>;
   typeResolver: GraphQLTypeResolver<any, any>;
+  subscribeFieldResolver: GraphQLFieldResolver<any, any>;
   errors: Array<GraphQLError>;
 }
 /**
@@ -91,9 +91,10 @@ export interface ExecutionArgs {
   operationName?: Maybe<string>;
   fieldResolver?: Maybe<GraphQLFieldResolver<any, any>>;
   typeResolver?: Maybe<GraphQLTypeResolver<any, any>>;
+  subscribeFieldResolver?: Maybe<GraphQLFieldResolver<any, any>>;
 }
 /**
- * Implements the "Evaluating requests" section of the GraphQL specification.
+ * Implements the "Executing requests" section of the GraphQL specification.
  *
  * Returns either a synchronous ExecutionResult (if all encountered resolvers
  * are synchronous), or a Promise of an ExecutionResult that will eventually be
@@ -106,62 +107,25 @@ export declare function execute(
   args: ExecutionArgs,
 ): PromiseOrValue<ExecutionResult>;
 /**
- * Also implements the "Evaluating requests" section of the GraphQL specification.
+ * Also implements the "Executing requests" section of the GraphQL specification.
  * However, it guarantees to complete synchronously (or throw an error) assuming
  * that all field resolvers are also synchronous.
  */
 export declare function executeSync(args: ExecutionArgs): ExecutionResult;
-/**
- * Essential assertions before executing to provide developer feedback for
- * improper use of the GraphQL library.
- *
- * @internal
- */
-export declare function assertValidExecutionArguments(
-  schema: GraphQLSchema,
-  document: DocumentNode,
-  rawVariableValues: Maybe<{
-    readonly [variable: string]: unknown;
-  }>,
-): void;
 /**
  * Constructs a ExecutionContext object from the arguments passed to
  * execute, which we will pass throughout the other execution methods.
  *
  * Throws a GraphQLError if a valid execution context cannot be created.
  *
+ * TODO: consider no longer exporting this function
  * @internal
  */
 export declare function buildExecutionContext(
-  schema: GraphQLSchema,
-  document: DocumentNode,
-  rootValue: unknown,
-  contextValue: unknown,
-  rawVariableValues: Maybe<{
-    readonly [variable: string]: unknown;
-  }>,
-  operationName: Maybe<string>,
-  fieldResolver: Maybe<GraphQLFieldResolver<unknown, unknown>>,
-  typeResolver?: Maybe<GraphQLTypeResolver<unknown, unknown>>,
+  args: ExecutionArgs,
 ): ReadonlyArray<GraphQLError> | ExecutionContext;
 /**
- * Given a selectionSet, adds all of the fields in that selection to
- * the passed in map of fields, and returns it at the end.
- *
- * CollectFields requires the "runtime type" of an object. For a field which
- * returns an Interface or Union type, the "runtime type" will be the actual
- * Object type returned by that field.
- *
- * @internal
- */
-export declare function collectFields(
-  exeContext: ExecutionContext,
-  runtimeType: GraphQLObjectType,
-  selectionSet: SelectionSetNode,
-  fields: Map<string, Array<FieldNode>>,
-  visitedFragmentNames: Set<string>,
-): Map<string, Array<FieldNode>>;
-/**
+ * TODO: consider no longer exporting this function
  * @internal
  */
 export declare function buildResolveInfo(
@@ -193,18 +157,59 @@ export declare const defaultFieldResolver: GraphQLFieldResolver<
   unknown
 >;
 /**
- * This method looks up the field on the given type definition.
- * It has special casing for the three introspection fields,
- * __schema, __type and __typename. __typename is special because
- * it can always be queried as a field, even in situations where no
- * other fields are allowed, like on a Union. __schema and __type
- * could get automatically added to the query type, but that would
- * require mutating type definitions, which would cause issues.
+ * Implements the "Subscribe" algorithm described in the GraphQL specification.
  *
- * @internal
+ * Returns a Promise which resolves to either an AsyncIterator (if successful)
+ * or an ExecutionResult (error). The promise will be rejected if the schema or
+ * other arguments to this function are invalid, or if the resolved event stream
+ * is not an async iterable.
+ *
+ * If the client-provided arguments to this function do not result in a
+ * compliant subscription, a GraphQL Response (ExecutionResult) with
+ * descriptive errors and no data will be returned.
+ *
+ * If the source stream could not be created due to faulty subscription
+ * resolver logic or underlying systems, the promise will resolve to a single
+ * ExecutionResult containing `errors` and no `data`.
+ *
+ * If the operation succeeded, the promise resolves to an AsyncIterator, which
+ * yields a stream of ExecutionResults representing the response stream.
+ *
+ * Accepts either an object with named arguments, or individual arguments.
  */
-export declare function getFieldDef(
-  schema: GraphQLSchema,
-  parentType: GraphQLObjectType,
-  fieldNode: FieldNode,
-): Maybe<GraphQLField<unknown, unknown>>;
+export declare function subscribe(
+  args: ExecutionArgs,
+): PromiseOrValue<
+  AsyncGenerator<ExecutionResult, void, void> | ExecutionResult
+>;
+/**
+ * Implements the "CreateSourceEventStream" algorithm described in the
+ * GraphQL specification, resolving the subscription source event stream.
+ *
+ * Returns a Promise which resolves to either an AsyncIterable (if successful)
+ * or an ExecutionResult (error). The promise will be rejected if the schema or
+ * other arguments to this function are invalid, or if the resolved event stream
+ * is not an async iterable.
+ *
+ * If the client-provided arguments to this function do not result in a
+ * compliant subscription, a GraphQL Response (ExecutionResult) with
+ * descriptive errors and no data will be returned.
+ *
+ * If the the source stream could not be created due to faulty subscription
+ * resolver logic or underlying systems, the promise will resolve to a single
+ * ExecutionResult containing `errors` and no `data`.
+ *
+ * If the operation succeeded, the promise resolves to the AsyncIterable for the
+ * event stream returned by the resolver.
+ *
+ * A Source Event Stream represents a sequence of events, each of which triggers
+ * a GraphQL execution for that event.
+ *
+ * This may be useful when hosting the stateful subscription service in a
+ * different process or machine than the stateless GraphQL execution engine,
+ * or otherwise separating these two steps. For more on this, see the
+ * "Supporting Subscriptions at Scale" information in the GraphQL specification.
+ */
+export declare function createSourceEventStream(
+  args: ExecutionArgs,
+): PromiseOrValue<AsyncIterable<unknown> | ExecutionResult>;

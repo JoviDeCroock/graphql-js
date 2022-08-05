@@ -1,22 +1,20 @@
-'use strict';
-
-Object.defineProperty(exports, '__esModule', {
-  value: true,
-});
-exports.OverlappingFieldsCanBeMergedRule = OverlappingFieldsCanBeMergedRule;
-
-var _inspect = require('../../jsutils/inspect.js');
-
-var _GraphQLError = require('../../error/GraphQLError.js');
-
-var _kinds = require('../../language/kinds.js');
-
-var _printer = require('../../language/printer.js');
-
-var _definition = require('../../type/definition.js');
-
-var _typeFromAST = require('../../utilities/typeFromAST.js');
-
+import { inspect } from '../../jsutils/inspect.js';
+import { GraphQLError } from '../../error/GraphQLError.js';
+import { Kind } from '../../language/kinds.js';
+import { print } from '../../language/printer.js';
+import {
+  getNamedType,
+  isInterfaceType,
+  isLeafType,
+  isListType,
+  isNonNullType,
+  isObjectType,
+} from '../../type/definition.js';
+import { sortValueNode } from '../../utilities/sortValueNode.js';
+import { typeFromAST } from '../../utilities/typeFromAST.js';
+/* eslint-disable max-params */
+// This file contains a lot of such errors but we plan to refactor it anyway
+// so just disable it for entire file.
 function reasonMessage(reason) {
   if (Array.isArray(reason)) {
     return reason
@@ -27,7 +25,6 @@ function reasonMessage(reason) {
       )
       .join(' and ');
   }
-
   return reason;
 }
 /**
@@ -36,16 +33,17 @@ function reasonMessage(reason) {
  * A selection set is only valid if all fields (including spreading any
  * fragments) either correspond to distinct response names or can be merged
  * without ambiguity.
+ *
+ * See https://spec.graphql.org/draft/#sec-Field-Selection-Merging
  */
-
-function OverlappingFieldsCanBeMergedRule(context) {
+export function OverlappingFieldsCanBeMergedRule(context) {
   // A memoization for when two fragments are compared "between" each other for
   // conflicts. Two fragments may be compared many times, so memoizing this can
   // dramatically improve the performance of this validator.
-  const comparedFragmentPairs = new PairSet(); // A cache for the "field map" and list of fragment names found in any given
+  const comparedFragmentPairs = new PairSet();
+  // A cache for the "field map" and list of fragment names found in any given
   // selection set. Selection sets may be asked for this information multiple
   // times, so this improves the performance of this validator.
-
   const cachedFieldsAndFragmentNames = new Map();
   return {
     SelectionSet(selectionSet) {
@@ -56,20 +54,18 @@ function OverlappingFieldsCanBeMergedRule(context) {
         context.getParentType(),
         selectionSet,
       );
-
       for (const [[responseName, reason], fields1, fields2] of conflicts) {
         const reasonMsg = reasonMessage(reason);
         context.reportError(
-          new _GraphQLError.GraphQLError(
+          new GraphQLError(
             `Fields "${responseName}" conflict because ${reasonMsg}. Use different aliases on the fields to fetch both if this was intentional.`,
-            fields1.concat(fields2),
+            { nodes: fields1.concat(fields2) },
           ),
         );
       }
     },
   };
 }
-
 /**
  * Algorithm:
  *
@@ -140,9 +136,9 @@ function findConflictsWithinSelectionSet(
     cachedFieldsAndFragmentNames,
     parentType,
     selectionSet,
-  ); // (A) Find find all conflicts "within" the fields of this selection set.
+  );
+  // (A) Find find all conflicts "within" the fields of this selection set.
   // Note: this is the *only place* `collectConflictsWithin` is called.
-
   collectConflictsWithin(
     context,
     conflicts,
@@ -150,7 +146,6 @@ function findConflictsWithinSelectionSet(
     comparedFragmentPairs,
     fieldMap,
   );
-
   if (fragmentNames.length !== 0) {
     // (B) Then collect conflicts between these fields and those represented by
     // each spread fragment name found.
@@ -163,11 +158,11 @@ function findConflictsWithinSelectionSet(
         false,
         fieldMap,
         fragmentNames[i],
-      ); // (C) Then compare this fragment with all other fragments found in this
+      );
+      // (C) Then compare this fragment with all other fragments found in this
       // selection set to collect conflicts between fragments spread together.
       // This compares each item in the list of fragment names to every other
       // item in that same list (except for itself).
-
       for (let j = i + 1; j < fragmentNames.length; j++) {
         collectConflictsBetweenFragments(
           context,
@@ -181,11 +176,10 @@ function findConflictsWithinSelectionSet(
       }
     }
   }
-
   return conflicts;
-} // Collect all conflicts found between a set of fields and a fragment reference
+}
+// Collect all conflicts found between a set of fields and a fragment reference
 // including via spreading in any nested fragments.
-
 function collectConflictsBetweenFieldsAndFragment(
   context,
   conflicts,
@@ -196,22 +190,21 @@ function collectConflictsBetweenFieldsAndFragment(
   fragmentName,
 ) {
   const fragment = context.getFragment(fragmentName);
-
   if (!fragment) {
     return;
   }
-
-  const [fieldMap2, fragmentNames2] = getReferencedFieldsAndFragmentNames(
-    context,
-    cachedFieldsAndFragmentNames,
-    fragment,
-  ); // Do not compare a fragment's fieldMap to itself.
-
+  const [fieldMap2, referencedFragmentNames] =
+    getReferencedFieldsAndFragmentNames(
+      context,
+      cachedFieldsAndFragmentNames,
+      fragment,
+    );
+  // Do not compare a fragment's fieldMap to itself.
   if (fieldMap === fieldMap2) {
     return;
-  } // (D) First collect any conflicts between the provided collection of fields
+  }
+  // (D) First collect any conflicts between the provided collection of fields
   // and the collection of fields represented by the given fragment.
-
   collectConflictsBetween(
     context,
     conflicts,
@@ -220,10 +213,25 @@ function collectConflictsBetweenFieldsAndFragment(
     areMutuallyExclusive,
     fieldMap,
     fieldMap2,
-  ); // (E) Then collect any conflicts between the provided collection of fields
+  );
+  // (E) Then collect any conflicts between the provided collection of fields
   // and any fragment names found in the given fragment.
-
-  for (let i = 0; i < fragmentNames2.length; i++) {
+  for (const referencedFragmentName of referencedFragmentNames) {
+    // Memoize so two fragments are not compared for conflicts more than once.
+    if (
+      comparedFragmentPairs.has(
+        referencedFragmentName,
+        fragmentName,
+        areMutuallyExclusive,
+      )
+    ) {
+      continue;
+    }
+    comparedFragmentPairs.add(
+      referencedFragmentName,
+      fragmentName,
+      areMutuallyExclusive,
+    );
     collectConflictsBetweenFieldsAndFragment(
       context,
       conflicts,
@@ -231,12 +239,12 @@ function collectConflictsBetweenFieldsAndFragment(
       comparedFragmentPairs,
       areMutuallyExclusive,
       fieldMap,
-      fragmentNames2[i],
+      referencedFragmentName,
     );
   }
-} // Collect all conflicts found between two fragments, including via spreading in
+}
+// Collect all conflicts found between two fragments, including via spreading in
 // any nested fragments.
-
 function collectConflictsBetweenFragments(
   context,
   conflicts,
@@ -249,8 +257,8 @@ function collectConflictsBetweenFragments(
   // No need to compare a fragment to itself.
   if (fragmentName1 === fragmentName2) {
     return;
-  } // Memoize so two fragments are not compared for conflicts more than once.
-
+  }
+  // Memoize so two fragments are not compared for conflicts more than once.
   if (
     comparedFragmentPairs.has(
       fragmentName1,
@@ -260,27 +268,26 @@ function collectConflictsBetweenFragments(
   ) {
     return;
   }
-
   comparedFragmentPairs.add(fragmentName1, fragmentName2, areMutuallyExclusive);
   const fragment1 = context.getFragment(fragmentName1);
   const fragment2 = context.getFragment(fragmentName2);
-
   if (!fragment1 || !fragment2) {
     return;
   }
-
-  const [fieldMap1, fragmentNames1] = getReferencedFieldsAndFragmentNames(
-    context,
-    cachedFieldsAndFragmentNames,
-    fragment1,
-  );
-  const [fieldMap2, fragmentNames2] = getReferencedFieldsAndFragmentNames(
-    context,
-    cachedFieldsAndFragmentNames,
-    fragment2,
-  ); // (F) First, collect all conflicts between these two collections of fields
+  const [fieldMap1, referencedFragmentNames1] =
+    getReferencedFieldsAndFragmentNames(
+      context,
+      cachedFieldsAndFragmentNames,
+      fragment1,
+    );
+  const [fieldMap2, referencedFragmentNames2] =
+    getReferencedFieldsAndFragmentNames(
+      context,
+      cachedFieldsAndFragmentNames,
+      fragment2,
+    );
+  // (F) First, collect all conflicts between these two collections of fields
   // (not including any nested fragments).
-
   collectConflictsBetween(
     context,
     conflicts,
@@ -289,10 +296,10 @@ function collectConflictsBetweenFragments(
     areMutuallyExclusive,
     fieldMap1,
     fieldMap2,
-  ); // (G) Then collect conflicts between the first fragment and any nested
+  );
+  // (G) Then collect conflicts between the first fragment and any nested
   // fragments spread in the second fragment.
-
-  for (let j = 0; j < fragmentNames2.length; j++) {
+  for (const referencedFragmentName2 of referencedFragmentNames2) {
     collectConflictsBetweenFragments(
       context,
       conflicts,
@@ -300,26 +307,26 @@ function collectConflictsBetweenFragments(
       comparedFragmentPairs,
       areMutuallyExclusive,
       fragmentName1,
-      fragmentNames2[j],
+      referencedFragmentName2,
     );
-  } // (G) Then collect conflicts between the second fragment and any nested
+  }
+  // (G) Then collect conflicts between the second fragment and any nested
   // fragments spread in the first fragment.
-
-  for (let i = 0; i < fragmentNames1.length; i++) {
+  for (const referencedFragmentName1 of referencedFragmentNames1) {
     collectConflictsBetweenFragments(
       context,
       conflicts,
       cachedFieldsAndFragmentNames,
       comparedFragmentPairs,
       areMutuallyExclusive,
-      fragmentNames1[i],
+      referencedFragmentName1,
       fragmentName2,
     );
   }
-} // Find all conflicts found between two selection sets, including those found
+}
+// Find all conflicts found between two selection sets, including those found
 // via spreading in fragments. Called when determining if conflicts exist
 // between the sub-fields of two overlapping fields.
-
 function findConflictsBetweenSubSelectionSets(
   context,
   cachedFieldsAndFragmentNames,
@@ -342,8 +349,8 @@ function findConflictsBetweenSubSelectionSets(
     cachedFieldsAndFragmentNames,
     parentType2,
     selectionSet2,
-  ); // (H) First, collect all conflicts between these two collections of field.
-
+  );
+  // (H) First, collect all conflicts between these two collections of field.
   collectConflictsBetween(
     context,
     conflicts,
@@ -352,57 +359,52 @@ function findConflictsBetweenSubSelectionSets(
     areMutuallyExclusive,
     fieldMap1,
     fieldMap2,
-  ); // (I) Then collect conflicts between the first collection of fields and
+  );
+  // (I) Then collect conflicts between the first collection of fields and
   // those referenced by each fragment name associated with the second.
-
-  if (fragmentNames2.length !== 0) {
-    for (let j = 0; j < fragmentNames2.length; j++) {
-      collectConflictsBetweenFieldsAndFragment(
-        context,
-        conflicts,
-        cachedFieldsAndFragmentNames,
-        comparedFragmentPairs,
-        areMutuallyExclusive,
-        fieldMap1,
-        fragmentNames2[j],
-      );
-    }
-  } // (I) Then collect conflicts between the second collection of fields and
+  for (const fragmentName2 of fragmentNames2) {
+    collectConflictsBetweenFieldsAndFragment(
+      context,
+      conflicts,
+      cachedFieldsAndFragmentNames,
+      comparedFragmentPairs,
+      areMutuallyExclusive,
+      fieldMap1,
+      fragmentName2,
+    );
+  }
+  // (I) Then collect conflicts between the second collection of fields and
   // those referenced by each fragment name associated with the first.
-
-  if (fragmentNames1.length !== 0) {
-    for (let i = 0; i < fragmentNames1.length; i++) {
-      collectConflictsBetweenFieldsAndFragment(
-        context,
-        conflicts,
-        cachedFieldsAndFragmentNames,
-        comparedFragmentPairs,
-        areMutuallyExclusive,
-        fieldMap2,
-        fragmentNames1[i],
-      );
-    }
-  } // (J) Also collect conflicts between any fragment names by the first and
+  for (const fragmentName1 of fragmentNames1) {
+    collectConflictsBetweenFieldsAndFragment(
+      context,
+      conflicts,
+      cachedFieldsAndFragmentNames,
+      comparedFragmentPairs,
+      areMutuallyExclusive,
+      fieldMap2,
+      fragmentName1,
+    );
+  }
+  // (J) Also collect conflicts between any fragment names by the first and
   // fragment names by the second. This compares each item in the first set of
   // names to each item in the second set of names.
-
-  for (let i = 0; i < fragmentNames1.length; i++) {
-    for (let j = 0; j < fragmentNames2.length; j++) {
+  for (const fragmentName1 of fragmentNames1) {
+    for (const fragmentName2 of fragmentNames2) {
       collectConflictsBetweenFragments(
         context,
         conflicts,
         cachedFieldsAndFragmentNames,
         comparedFragmentPairs,
         areMutuallyExclusive,
-        fragmentNames1[i],
-        fragmentNames2[j],
+        fragmentName1,
+        fragmentName2,
       );
     }
   }
-
   return conflicts;
-} // Collect all Conflicts "within" one collection of fields.
-
+}
+// Collect all Conflicts "within" one collection of fields.
 function collectConflictsWithin(
   context,
   conflicts,
@@ -430,7 +432,6 @@ function collectConflictsWithin(
             fields[i],
             fields[j],
           );
-
           if (conflict) {
             conflicts.push(conflict);
           }
@@ -438,12 +439,12 @@ function collectConflictsWithin(
       }
     }
   }
-} // Collect all Conflicts between two collections of fields. This is similar to,
+}
+// Collect all Conflicts between two collections of fields. This is similar to,
 // but different from the `collectConflictsWithin` function above. This check
 // assumes that `collectConflictsWithin` has already been called on each
 // provided collection of fields. This is true because this validator traverses
 // each individual selection set.
-
 function collectConflictsBetween(
   context,
   conflicts,
@@ -460,20 +461,18 @@ function collectConflictsBetween(
   // in the second field map to find potential conflicts.
   for (const [responseName, fields1] of Object.entries(fieldMap1)) {
     const fields2 = fieldMap2[responseName];
-
     if (fields2) {
-      for (let i = 0; i < fields1.length; i++) {
-        for (let j = 0; j < fields2.length; j++) {
+      for (const field1 of fields1) {
+        for (const field2 of fields2) {
           const conflict = findConflict(
             context,
             cachedFieldsAndFragmentNames,
             comparedFragmentPairs,
             parentFieldsAreMutuallyExclusive,
             responseName,
-            fields1[i],
-            fields2[j],
+            field1,
+            field2,
           );
-
           if (conflict) {
             conflicts.push(conflict);
           }
@@ -481,9 +480,9 @@ function collectConflictsBetween(
       }
     }
   }
-} // Determines if there is a conflict between two particular fields, including
+}
+// Determines if there is a conflict between two particular fields, including
 // comparing their sub-fields.
-
 function findConflict(
   context,
   cachedFieldsAndFragmentNames,
@@ -494,7 +493,8 @@ function findConflict(
   field2,
 ) {
   const [parentType1, node1, def1] = field1;
-  const [parentType2, node2, def2] = field2; // If it is known that two fields could not possibly apply at the same
+  const [parentType2, node2, def2] = field2;
+  // If it is known that two fields could not possibly apply at the same
   // time, due to the parent types, then it is safe to permit them to diverge
   // in aliased field or arguments used as they will not present any ambiguity
   // by differing.
@@ -502,170 +502,131 @@ function findConflict(
   // different Object types. Interface or Union types might overlap - if not
   // in the current state of the schema, then perhaps in some future version,
   // thus may not safely diverge.
-
   const areMutuallyExclusive =
     parentFieldsAreMutuallyExclusive ||
     (parentType1 !== parentType2 &&
-      (0, _definition.isObjectType)(parentType1) &&
-      (0, _definition.isObjectType)(parentType2));
-
+      isObjectType(parentType1) &&
+      isObjectType(parentType2));
   if (!areMutuallyExclusive) {
-    var _node1$arguments, _node2$arguments;
-
     // Two aliases must refer to the same field.
     const name1 = node1.name.value;
     const name2 = node2.name.value;
-
     if (name1 !== name2) {
       return [
         [responseName, `"${name1}" and "${name2}" are different fields`],
         [node1],
         [node2],
       ];
-    } // istanbul ignore next (See: 'https://github.com/graphql/graphql-js/issues/2203')
-
-    const args1 =
-      (_node1$arguments = node1.arguments) !== null &&
-      _node1$arguments !== void 0
-        ? _node1$arguments
-        : []; // istanbul ignore next (See: 'https://github.com/graphql/graphql-js/issues/2203')
-
-    const args2 =
-      (_node2$arguments = node2.arguments) !== null &&
-      _node2$arguments !== void 0
-        ? _node2$arguments
-        : []; // Two field calls must have the same arguments.
-
-    if (!sameArguments(args1, args2)) {
+    }
+    // Two field calls must have the same arguments.
+    if (stringifyArguments(node1) !== stringifyArguments(node2)) {
       return [
         [responseName, 'they have differing arguments'],
         [node1],
         [node2],
       ];
     }
-  } // The return type for each field.
-
-  const type1 = def1 === null || def1 === void 0 ? void 0 : def1.type;
-  const type2 = def2 === null || def2 === void 0 ? void 0 : def2.type;
-
+  }
+  // The return type for each field.
+  const type1 = def1?.type;
+  const type2 = def2?.type;
   if (type1 && type2 && doTypesConflict(type1, type2)) {
     return [
       [
         responseName,
-        `they return conflicting types "${(0, _inspect.inspect)(
-          type1,
-        )}" and "${(0, _inspect.inspect)(type2)}"`,
+        `they return conflicting types "${inspect(type1)}" and "${inspect(
+          type2,
+        )}"`,
       ],
       [node1],
       [node2],
     ];
-  } // Collect and compare sub-fields. Use the same "visited fragment names" list
+  }
+  // Collect and compare sub-fields. Use the same "visited fragment names" list
   // for both collections so fields in a fragment reference are never
   // compared to themselves.
-
   const selectionSet1 = node1.selectionSet;
   const selectionSet2 = node2.selectionSet;
-
   if (selectionSet1 && selectionSet2) {
     const conflicts = findConflictsBetweenSubSelectionSets(
       context,
       cachedFieldsAndFragmentNames,
       comparedFragmentPairs,
       areMutuallyExclusive,
-      (0, _definition.getNamedType)(type1),
+      getNamedType(type1),
       selectionSet1,
-      (0, _definition.getNamedType)(type2),
+      getNamedType(type2),
       selectionSet2,
     );
     return subfieldConflicts(conflicts, responseName, node1, node2);
   }
 }
-
-function sameArguments(arguments1, arguments2) {
-  if (arguments1.length !== arguments2.length) {
-    return false;
-  }
-
-  return arguments1.every((argument1) => {
-    const argument2 = arguments2.find(
-      (argument) => argument.name.value === argument1.name.value,
-    );
-
-    if (!argument2) {
-      return false;
-    }
-
-    return sameValue(argument1.value, argument2.value);
-  });
+function stringifyArguments(fieldNode) {
+  // FIXME https://github.com/graphql/graphql-js/issues/2203
+  const args = /* c8 ignore next */ fieldNode.arguments ?? [];
+  const inputObjectWithArgs = {
+    kind: Kind.OBJECT,
+    fields: args.map((argNode) => ({
+      kind: Kind.OBJECT_FIELD,
+      name: argNode.name,
+      value: argNode.value,
+    })),
+  };
+  return print(sortValueNode(inputObjectWithArgs));
 }
-
-function sameValue(value1, value2) {
-  return (0, _printer.print)(value1) === (0, _printer.print)(value2);
-} // Two types conflict if both types could not apply to a value simultaneously.
+// Two types conflict if both types could not apply to a value simultaneously.
 // Composite types are ignored as their individual field types will be compared
 // later recursively. However List and Non-Null types must match.
-
 function doTypesConflict(type1, type2) {
-  if ((0, _definition.isListType)(type1)) {
-    return (0, _definition.isListType)(type2)
+  if (isListType(type1)) {
+    return isListType(type2)
       ? doTypesConflict(type1.ofType, type2.ofType)
       : true;
   }
-
-  if ((0, _definition.isListType)(type2)) {
+  if (isListType(type2)) {
     return true;
   }
-
-  if ((0, _definition.isNonNullType)(type1)) {
-    return (0, _definition.isNonNullType)(type2)
+  if (isNonNullType(type1)) {
+    return isNonNullType(type2)
       ? doTypesConflict(type1.ofType, type2.ofType)
       : true;
   }
-
-  if ((0, _definition.isNonNullType)(type2)) {
+  if (isNonNullType(type2)) {
     return true;
   }
-
-  if (
-    (0, _definition.isLeafType)(type1) ||
-    (0, _definition.isLeafType)(type2)
-  ) {
+  if (isLeafType(type1) || isLeafType(type2)) {
     return type1 !== type2;
   }
-
   return false;
-} // Given a selection set, return the collection of fields (a mapping of response
+}
+// Given a selection set, return the collection of fields (a mapping of response
 // name to field nodes and definitions) as well as a list of fragment names
 // referenced via fragment spreads.
-
 function getFieldsAndFragmentNames(
   context,
   cachedFieldsAndFragmentNames,
   parentType,
   selectionSet,
 ) {
-  let cached = cachedFieldsAndFragmentNames.get(selectionSet);
-
-  if (!cached) {
-    const nodeAndDefs = Object.create(null);
-    const fragmentNames = Object.create(null);
-
-    _collectFieldsAndFragmentNames(
-      context,
-      parentType,
-      selectionSet,
-      nodeAndDefs,
-      fragmentNames,
-    );
-
-    cached = [nodeAndDefs, Object.keys(fragmentNames)];
-    cachedFieldsAndFragmentNames.set(selectionSet, cached);
+  const cached = cachedFieldsAndFragmentNames.get(selectionSet);
+  if (cached) {
+    return cached;
   }
-
-  return cached;
-} // Given a reference to a fragment, return the represented collection of fields
+  const nodeAndDefs = Object.create(null);
+  const fragmentNames = Object.create(null);
+  _collectFieldsAndFragmentNames(
+    context,
+    parentType,
+    selectionSet,
+    nodeAndDefs,
+    fragmentNames,
+  );
+  const result = [nodeAndDefs, Object.keys(fragmentNames)];
+  cachedFieldsAndFragmentNames.set(selectionSet, result);
+  return result;
+}
+// Given a reference to a fragment, return the represented collection of fields
 // as well as a list of nested fragment names referenced via fragment spreads.
-
 function getReferencedFieldsAndFragmentNames(
   context,
   cachedFieldsAndFragmentNames,
@@ -673,15 +634,10 @@ function getReferencedFieldsAndFragmentNames(
 ) {
   // Short-circuit building a type from the node if possible.
   const cached = cachedFieldsAndFragmentNames.get(fragment.selectionSet);
-
   if (cached) {
     return cached;
   }
-
-  const fragmentType = (0, _typeFromAST.typeFromAST)(
-    context.getSchema(),
-    fragment.typeCondition,
-  );
+  const fragmentType = typeFromAST(context.getSchema(), fragment.typeCondition);
   return getFieldsAndFragmentNames(
     context,
     cachedFieldsAndFragmentNames,
@@ -689,7 +645,6 @@ function getReferencedFieldsAndFragmentNames(
     fragment.selectionSet,
   );
 }
-
 function _collectFieldsAndFragmentNames(
   context,
   parentType,
@@ -699,39 +654,29 @@ function _collectFieldsAndFragmentNames(
 ) {
   for (const selection of selectionSet.selections) {
     switch (selection.kind) {
-      case _kinds.Kind.FIELD: {
+      case Kind.FIELD: {
         const fieldName = selection.name.value;
         let fieldDef;
-
-        if (
-          (0, _definition.isObjectType)(parentType) ||
-          (0, _definition.isInterfaceType)(parentType)
-        ) {
+        if (isObjectType(parentType) || isInterfaceType(parentType)) {
           fieldDef = parentType.getFields()[fieldName];
         }
-
         const responseName = selection.alias
           ? selection.alias.value
           : fieldName;
-
         if (!nodeAndDefs[responseName]) {
           nodeAndDefs[responseName] = [];
         }
-
         nodeAndDefs[responseName].push([parentType, selection, fieldDef]);
         break;
       }
-
-      case _kinds.Kind.FRAGMENT_SPREAD:
+      case Kind.FRAGMENT_SPREAD:
         fragmentNames[selection.name.value] = true;
         break;
-
-      case _kinds.Kind.INLINE_FRAGMENT: {
+      case Kind.INLINE_FRAGMENT: {
         const typeCondition = selection.typeCondition;
         const inlineFragmentType = typeCondition
-          ? (0, _typeFromAST.typeFromAST)(context.getSchema(), typeCondition)
+          ? typeFromAST(context.getSchema(), typeCondition)
           : parentType;
-
         _collectFieldsAndFragmentNames(
           context,
           inlineFragmentType,
@@ -739,14 +684,13 @@ function _collectFieldsAndFragmentNames(
           nodeAndDefs,
           fragmentNames,
         );
-
         break;
       }
     }
   }
-} // Given a series of Conflicts which occurred between two sub-fields, generate
+}
+// Given a series of Conflicts which occurred between two sub-fields, generate
 // a single Conflict.
-
 function subfieldConflicts(conflicts, responseName, node1, node2) {
   if (conflicts.length > 0) {
     return [
@@ -759,36 +703,24 @@ function subfieldConflicts(conflicts, responseName, node1, node2) {
 /**
  * A way to keep track of pairs of things when the ordering of the pair does not matter.
  */
-
 class PairSet {
   constructor() {
     this._data = new Map();
   }
-
   has(a, b, areMutuallyExclusive) {
-    var _this$_data$get;
-
     const [key1, key2] = a < b ? [a, b] : [b, a];
-    const result =
-      (_this$_data$get = this._data.get(key1)) === null ||
-      _this$_data$get === void 0
-        ? void 0
-        : _this$_data$get.get(key2);
-
+    const result = this._data.get(key1)?.get(key2);
     if (result === undefined) {
       return false;
-    } // areMutuallyExclusive being false is a superset of being true, hence if
+    }
+    // areMutuallyExclusive being false is a superset of being true, hence if
     // we want to know if this PairSet "has" these two with no exclusivity,
     // we have to ensure it was added as such.
-
     return areMutuallyExclusive ? true : areMutuallyExclusive === result;
   }
-
   add(a, b, areMutuallyExclusive) {
     const [key1, key2] = a < b ? [a, b] : [b, a];
-
     const map = this._data.get(key1);
-
     if (map === undefined) {
       this._data.set(key1, new Map([[key2, areMutuallyExclusive]]));
     } else {
