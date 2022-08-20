@@ -47,7 +47,7 @@ import {
   collectFields,
   collectSubfields as _collectSubfields,
 } from './collectFields.ts';
-import { mapAsyncIterator } from './mapAsyncIterator.ts';
+import { mapAsyncIterable } from './mapAsyncIterable.ts';
 import { getArgumentValues, getVariableValues } from './values.ts';
 /* eslint-disable max-params */
 // This file contains a lot of such errors but we plan to refactor it anyway
@@ -363,7 +363,7 @@ function executeFieldsSerially(
   fields: Map<string, ReadonlyArray<FieldNode>>,
 ): PromiseOrValue<ObjMap<unknown>> {
   return promiseReduce(
-    fields.entries(),
+    fields,
     (results, [responseName, fieldNodes]) => {
       const fieldPath = addPath(path, responseName, parentType.name);
       const result = executeField(
@@ -401,7 +401,7 @@ function executeFields(
 ): PromiseOrValue<ObjMap<unknown>> {
   const results = Object.create(null);
   let containsPromise = false;
-  for (const [responseName, fieldNodes] of fields.entries()) {
+  for (const [responseName, fieldNodes] of fields) {
     const fieldPath = addPath(path, responseName, parentType.name);
     const result = executeField(
       exeContext,
@@ -1053,7 +1053,7 @@ function mapSourceToResponse(
   // the GraphQL specification. The `execute` function provides the
   // "ExecuteSubscriptionEvent" algorithm, as it is nearly identical to the
   // "ExecuteQuery" algorithm, for which `execute` is also used.
-  return mapAsyncIterator(resultOrStream, (payload: unknown) =>
+  return mapAsyncIterable(resultOrStream, (payload: unknown) =>
     executeImpl(buildPerEventExecutionContext(exeContext, payload)),
   );
 }
@@ -1129,7 +1129,8 @@ function executeSubscription(
     rootType,
     operation.selectionSet,
   );
-  const [responseName, fieldNodes] = [...rootFields.entries()][0];
+  const firstRootField = rootFields.entries().next().value;
+  const [responseName, fieldNodes] = firstRootField;
   const fieldName = fieldNodes[0].name.value;
   const fieldDef = schema.getField(rootType, fieldName);
   if (!fieldDef) {
