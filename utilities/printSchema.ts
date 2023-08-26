@@ -61,23 +61,26 @@ function printFilteredSchema(
     .join('\n\n');
 }
 function printSchemaDefinition(schema: GraphQLSchema): Maybe<string> {
-  if (schema.description == null && isSchemaOfCommonNames(schema)) {
+  const queryType = schema.getQueryType();
+  const mutationType = schema.getMutationType();
+  const subscriptionType = schema.getSubscriptionType();
+  // Special case: When a schema has no root operation types, no valid schema
+  // definition can be printed.
+  if (!queryType && !mutationType && !subscriptionType) {
     return;
   }
-  const operationTypes = [];
-  const queryType = schema.getQueryType();
-  if (queryType) {
-    operationTypes.push(`  query: ${queryType.name}`);
+  // Only print a schema definition if there is a description or if it should
+  // not be omitted because of having default type names.
+  if (schema.description != null || !hasDefaultRootOperationTypes(schema)) {
+    return (
+      printDescription(schema) +
+      'schema {\n' +
+      (queryType ? `  query: ${queryType.name}\n` : '') +
+      (mutationType ? `  mutation: ${mutationType.name}\n` : '') +
+      (subscriptionType ? `  subscription: ${subscriptionType.name}\n` : '') +
+      '}'
+    );
   }
-  const mutationType = schema.getMutationType();
-  if (mutationType) {
-    operationTypes.push(`  mutation: ${mutationType.name}`);
-  }
-  const subscriptionType = schema.getSubscriptionType();
-  if (subscriptionType) {
-    operationTypes.push(`  subscription: ${subscriptionType.name}`);
-  }
-  return printDescription(schema) + `schema {\n${operationTypes.join('\n')}\n}`;
 }
 /**
  * GraphQL schema define root types for each type of operation. These types are
@@ -92,22 +95,20 @@ function printSchemaDefinition(schema: GraphQLSchema): Maybe<string> {
  *   }
  * ```
  *
- * When using this naming convention, the schema description can be omitted.
+ * When using this naming convention, the schema description can be omitted so
+ * long as these names are only used for operation types.
+ *
+ * Note however that if any of these default names are used elsewhere in the
+ * schema but not as a root operation type, the schema definition must still
+ * be printed to avoid ambiguity.
  */
-function isSchemaOfCommonNames(schema: GraphQLSchema): boolean {
-  const queryType = schema.getQueryType();
-  if (queryType && queryType.name !== 'Query') {
-    return false;
-  }
-  const mutationType = schema.getMutationType();
-  if (mutationType && mutationType.name !== 'Mutation') {
-    return false;
-  }
-  const subscriptionType = schema.getSubscriptionType();
-  if (subscriptionType && subscriptionType.name !== 'Subscription') {
-    return false;
-  }
-  return true;
+function hasDefaultRootOperationTypes(schema: GraphQLSchema): boolean {
+  /* eslint-disable eqeqeq */
+  return (
+    schema.getQueryType() == schema.getType('Query') &&
+    schema.getMutationType() == schema.getType('Mutation') &&
+    schema.getSubscriptionType() == schema.getType('Subscription')
+  );
 }
 export function printType(type: GraphQLNamedType): string {
   if (isScalarType(type)) {
@@ -208,7 +209,7 @@ function printArgs(
     return '';
   }
   // If every arg does not have a description, print them on one line.
-  if (args.every((arg) => !arg.description)) {
+  if (args.every((arg) => arg.description == null)) {
     return '(' + args.map(printInputValue).join(', ') + ')';
   }
   return (
@@ -235,7 +236,7 @@ function printInputValue(arg: GraphQLInputField): string {
   }
   return argDecl + printDeprecated(arg.deprecationReason);
 }
-function printDirective(directive: GraphQLDirective): string {
+export function printDirective(directive: GraphQLDirective): string {
   return (
     printDescription(directive) +
     'directive @' +
@@ -284,5 +285,5 @@ function printDescription(
   });
   const prefix =
     indentation && !firstInBlock ? '\n' + indentation : indentation;
-  return prefix + blockString.replace(/\n/g, '\n' + indentation) + '\n';
+  return prefix + blockString.replaceAll('\n', '\n' + indentation) + '\n';
 }

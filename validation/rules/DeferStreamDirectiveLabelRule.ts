@@ -1,4 +1,5 @@
 import { GraphQLError } from '../../error/GraphQLError.ts';
+import type { DirectiveNode } from '../../language/ast.ts';
 import { Kind } from '../../language/kinds.ts';
 import type { ASTVisitor } from '../../language/visitor.ts';
 import {
@@ -7,14 +8,14 @@ import {
 } from '../../type/directives.ts';
 import type { ValidationContext } from '../ValidationContext.ts';
 /**
- * Stream directive on list field
+ * Defer and stream directive labels are unique
  *
  * A GraphQL document is only valid if defer and stream directives' label argument is static and unique.
  */
 export function DeferStreamDirectiveLabelRule(
   context: ValidationContext,
 ): ASTVisitor {
-  const knownLabels = Object.create(null);
+  const knownLabels = new Map<string, DirectiveNode>();
   return {
     Directive(node) {
       if (
@@ -35,15 +36,18 @@ export function DeferStreamDirectiveLabelRule(
               { nodes: node },
             ),
           );
-        } else if (knownLabels[labelValue.value]) {
+          return;
+        }
+        const knownLabel = knownLabels.get(labelValue.value);
+        if (knownLabel != null) {
           context.reportError(
             new GraphQLError(
               'Defer/Stream directive label argument must be unique.',
-              { nodes: [knownLabels[labelValue.value], node] },
+              { nodes: [knownLabel, node] },
             ),
           );
         } else {
-          knownLabels[labelValue.value] = node;
+          knownLabels.set(labelValue.value, node);
         }
       }
     },

@@ -633,8 +633,10 @@ export class GraphQLObjectType<TSource = any, TContext = any> {
     this.extensions = toObjMap(config.extensions);
     this.astNode = config.astNode;
     this.extensionASTNodes = config.extensionASTNodes ?? [];
-    this._fields = () => defineFieldMap(config);
-    this._interfaces = () => defineInterfaces(config);
+    // prettier-ignore
+    // FIXME: blocked by https://github.com/prettier/prettier/issues/14625
+    this._fields = (defineFieldMap<TSource, TContext>).bind(undefined, config.fields);
+    this._interfaces = defineInterfaces.bind(undefined, config.interfaces);
   }
   get [Symbol.toStringTag]() {
     return 'GraphQLObjectType';
@@ -671,19 +673,14 @@ export class GraphQLObjectType<TSource = any, TContext = any> {
   }
 }
 function defineInterfaces(
-  config: Readonly<
-    GraphQLObjectTypeConfig<any, any> | GraphQLInterfaceTypeConfig<any, any>
-  >,
+  interfaces: Maybe<ThunkReadonlyArray<GraphQLInterfaceType>>,
 ): ReadonlyArray<GraphQLInterfaceType> {
-  return resolveReadonlyArrayThunk(config.interfaces ?? []);
+  return resolveReadonlyArrayThunk(interfaces ?? []);
 }
 function defineFieldMap<TSource, TContext>(
-  config: Readonly<
-    | GraphQLObjectTypeConfig<TSource, TContext>
-    | GraphQLInterfaceTypeConfig<TSource, TContext>
-  >,
+  fields: ThunkObjMap<GraphQLFieldConfig<TSource, TContext>>,
 ): GraphQLFieldMap<TSource, TContext> {
-  const fieldMap = resolveObjMapThunk(config.fields);
+  const fieldMap = resolveObjMapThunk(fields);
   return mapValue(fieldMap, (fieldConfig, fieldName) => {
     const argsConfig = fieldConfig.args ?? {};
     return {
@@ -700,9 +697,9 @@ function defineFieldMap<TSource, TContext>(
   });
 }
 export function defineArguments(
-  config: GraphQLFieldConfigArgumentMap,
+  args: GraphQLFieldConfigArgumentMap,
 ): ReadonlyArray<GraphQLArgument> {
-  return Object.entries(config).map(([argName, argConfig]) => ({
+  return Object.entries(args).map(([argName, argConfig]) => ({
     name: assertName(argName),
     description: argConfig.description,
     type: argConfig.type,
@@ -906,29 +903,31 @@ export interface GraphQLInterfaceTypeExtensions {
  * });
  * ```
  */
-export class GraphQLInterfaceType {
+export class GraphQLInterfaceType<TSource = any, TContext = any> {
   name: string;
   description: Maybe<string>;
-  resolveType: Maybe<GraphQLTypeResolver<any, any>>;
+  resolveType: Maybe<GraphQLTypeResolver<TSource, TContext>>;
   extensions: Readonly<GraphQLInterfaceTypeExtensions>;
   astNode: Maybe<InterfaceTypeDefinitionNode>;
   extensionASTNodes: ReadonlyArray<InterfaceTypeExtensionNode>;
-  private _fields: ThunkObjMap<GraphQLField<any, any>>;
+  private _fields: ThunkObjMap<GraphQLField<TSource, TContext>>;
   private _interfaces: ThunkReadonlyArray<GraphQLInterfaceType>;
-  constructor(config: Readonly<GraphQLInterfaceTypeConfig<any, any>>) {
+  constructor(config: Readonly<GraphQLInterfaceTypeConfig<TSource, TContext>>) {
     this.name = assertName(config.name);
     this.description = config.description;
     this.resolveType = config.resolveType;
     this.extensions = toObjMap(config.extensions);
     this.astNode = config.astNode;
     this.extensionASTNodes = config.extensionASTNodes ?? [];
-    this._fields = defineFieldMap.bind(undefined, config);
-    this._interfaces = defineInterfaces.bind(undefined, config);
+    // prettier-ignore
+    // FIXME: blocked by https://github.com/prettier/prettier/issues/14625
+    this._fields = (defineFieldMap<TSource, TContext>).bind(undefined, config.fields);
+    this._interfaces = defineInterfaces.bind(undefined, config.interfaces);
   }
   get [Symbol.toStringTag]() {
     return 'GraphQLInterfaceType';
   }
-  getFields(): GraphQLFieldMap<any, any> {
+  getFields(): GraphQLFieldMap<TSource, TContext> {
     if (typeof this._fields === 'function') {
       this._fields = this._fields();
     }
@@ -940,7 +939,7 @@ export class GraphQLInterfaceType {
     }
     return this._interfaces;
   }
-  toConfig(): GraphQLInterfaceTypeNormalizedConfig {
+  toConfig(): GraphQLInterfaceTypeNormalizedConfig<TSource, TContext> {
     return {
       name: this.name,
       description: this.description,
@@ -974,10 +973,10 @@ export interface GraphQLInterfaceTypeConfig<TSource, TContext> {
   astNode?: Maybe<InterfaceTypeDefinitionNode>;
   extensionASTNodes?: Maybe<ReadonlyArray<InterfaceTypeExtensionNode>>;
 }
-export interface GraphQLInterfaceTypeNormalizedConfig
+export interface GraphQLInterfaceTypeNormalizedConfig<TSource, TContext>
   extends GraphQLInterfaceTypeConfig<any, any> {
   interfaces: ReadonlyArray<GraphQLInterfaceType>;
-  fields: GraphQLFieldConfigMap<any, any>;
+  fields: GraphQLFieldConfigMap<TSource, TContext>;
   extensions: Readonly<GraphQLInterfaceTypeExtensions>;
   extensionASTNodes: ReadonlyArray<InterfaceTypeExtensionNode>;
 }
@@ -1032,7 +1031,7 @@ export class GraphQLUnionType {
     this.extensions = toObjMap(config.extensions);
     this.astNode = config.astNode;
     this.extensionASTNodes = config.extensionASTNodes ?? [];
-    this._types = defineTypes.bind(undefined, config);
+    this._types = defineTypes.bind(undefined, config.types);
   }
   get [Symbol.toStringTag]() {
     return 'GraphQLUnionType';
@@ -1062,9 +1061,9 @@ export class GraphQLUnionType {
   }
 }
 function defineTypes(
-  config: Readonly<GraphQLUnionTypeConfig<unknown, unknown>>,
+  types: ThunkReadonlyArray<GraphQLObjectType>,
 ): ReadonlyArray<GraphQLObjectType> {
-  return resolveReadonlyArrayThunk(config.types);
+  return resolveReadonlyArrayThunk(types);
 }
 export interface GraphQLUnionTypeConfig<TSource, TContext> {
   name: string;
@@ -1326,6 +1325,7 @@ export class GraphQLInputObjectType {
   extensions: Readonly<GraphQLInputObjectTypeExtensions>;
   astNode: Maybe<InputObjectTypeDefinitionNode>;
   extensionASTNodes: ReadonlyArray<InputObjectTypeExtensionNode>;
+  isOneOf: boolean;
   private _fields: ThunkObjMap<GraphQLInputField>;
   constructor(config: Readonly<GraphQLInputObjectTypeConfig>) {
     this.name = assertName(config.name);
@@ -1333,7 +1333,8 @@ export class GraphQLInputObjectType {
     this.extensions = toObjMap(config.extensions);
     this.astNode = config.astNode;
     this.extensionASTNodes = config.extensionASTNodes ?? [];
-    this._fields = defineInputFieldMap.bind(undefined, config);
+    this.isOneOf = config.isOneOf ?? false;
+    this._fields = defineInputFieldMap.bind(undefined, config.fields);
   }
   get [Symbol.toStringTag]() {
     return 'GraphQLInputObjectType';
@@ -1360,6 +1361,7 @@ export class GraphQLInputObjectType {
       extensions: this.extensions,
       astNode: this.astNode,
       extensionASTNodes: this.extensionASTNodes,
+      isOneOf: this.isOneOf,
     };
   }
   toString(): string {
@@ -1370,25 +1372,18 @@ export class GraphQLInputObjectType {
   }
 }
 function defineInputFieldMap(
-  config: Readonly<GraphQLInputObjectTypeConfig>,
+  fields: ThunkObjMap<GraphQLInputFieldConfig>,
 ): GraphQLInputFieldMap {
-  const fieldMap = resolveObjMapThunk(config.fields);
-  return mapValue(fieldMap, (fieldConfig, fieldName) => {
-    !('resolve' in fieldConfig) ||
-      devAssert(
-        false,
-        `${config.name}.${fieldName} field has a resolve property, but Input Types cannot define resolvers.`,
-      );
-    return {
-      name: assertName(fieldName),
-      description: fieldConfig.description,
-      type: fieldConfig.type,
-      defaultValue: fieldConfig.defaultValue,
-      deprecationReason: fieldConfig.deprecationReason,
-      extensions: toObjMap(fieldConfig.extensions),
-      astNode: fieldConfig.astNode,
-    };
-  });
+  const fieldMap = resolveObjMapThunk(fields);
+  return mapValue(fieldMap, (fieldConfig, fieldName) => ({
+    name: assertName(fieldName),
+    description: fieldConfig.description,
+    type: fieldConfig.type,
+    defaultValue: fieldConfig.defaultValue,
+    deprecationReason: fieldConfig.deprecationReason,
+    extensions: toObjMap(fieldConfig.extensions),
+    astNode: fieldConfig.astNode,
+  }));
 }
 export interface GraphQLInputObjectTypeConfig {
   name: string;
@@ -1397,6 +1392,7 @@ export interface GraphQLInputObjectTypeConfig {
   extensions?: Maybe<Readonly<GraphQLInputObjectTypeExtensions>>;
   astNode?: Maybe<InputObjectTypeDefinitionNode>;
   extensionASTNodes?: Maybe<ReadonlyArray<InputObjectTypeExtensionNode>>;
+  isOneOf?: boolean;
 }
 interface GraphQLInputObjectTypeNormalizedConfig
   extends GraphQLInputObjectTypeConfig {

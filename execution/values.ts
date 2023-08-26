@@ -1,5 +1,4 @@
 import { inspect } from '../jsutils/inspect.ts';
-import { keyMap } from '../jsutils/keyMap.ts';
 import type { Maybe } from '../jsutils/Maybe.ts';
 import type { ObjMap } from '../jsutils/ObjMap.ts';
 import { printPathArray } from '../jsutils/printPathArray.ts';
@@ -100,7 +99,7 @@ function coerceVariableValues(
       );
       continue;
     }
-    if (!hasOwnProperty(inputs, varName)) {
+    if (!Object.hasOwn(inputs, varName)) {
       if (varDefNode.defaultValue) {
         coercedValues[varName] = valueFromAST(varDefNode.defaultValue, varType);
       } else if (isNonNullType(varType)) {
@@ -137,7 +136,7 @@ function coerceVariableValues(
         onError(
           new GraphQLError(prefix + '; ' + error.message, {
             nodes: varDefNode,
-            originalError: error.originalError,
+            originalError: error,
           }),
         );
       },
@@ -166,12 +165,12 @@ export function getArgumentValues(
   // FIXME: https://github.com/graphql/graphql-js/issues/2203
   /* c8 ignore next */
   const argumentNodes = node.arguments ?? [];
-  const argNodeMap = keyMap(argumentNodes, (arg) => arg.name.value);
+  const argNodeMap = new Map(argumentNodes.map((arg) => [arg.name.value, arg]));
   for (const argDef of def.args) {
     const name = argDef.name;
     const argType = argDef.type;
-    const argumentNode = argNodeMap[name];
-    if (!argumentNode) {
+    const argumentNode = argNodeMap.get(name);
+    if (argumentNode == null) {
       if (argDef.defaultValue !== undefined) {
         coercedValues[name] = argDef.defaultValue;
       } else if (isNonNullType(argType)) {
@@ -189,7 +188,7 @@ export function getArgumentValues(
       const variableName = valueNode.name.value;
       if (
         variableValues == null ||
-        !hasOwnProperty(variableValues, variableName)
+        !Object.hasOwn(variableValues, variableName)
       ) {
         if (argDef.defaultValue !== undefined) {
           coercedValues[name] = argDef.defaultValue;
@@ -253,7 +252,4 @@ export function getDirectiveValues(
   if (directiveNode) {
     return getArgumentValues(directiveDef, directiveNode, variableValues);
   }
-}
-function hasOwnProperty(obj: unknown, prop: string): boolean {
-  return Object.prototype.hasOwnProperty.call(obj, prop);
 }

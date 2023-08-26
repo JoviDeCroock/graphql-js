@@ -19,7 +19,7 @@ export function dedentBlockStringLines(
     if (indent === line.length) {
       continue; // skip empty lines
     }
-    firstNonEmptyLine = firstNonEmptyLine ?? i;
+    firstNonEmptyLine ??= i;
     lastNonEmptyLine = i;
     if (i !== 0 && indent < commonIndent) {
       commonIndent = indent;
@@ -107,7 +107,7 @@ export function printBlockString(
     minimize?: boolean;
   },
 ): string {
-  const escapedValue = value.replace(/"""/g, '\\"""');
+  const escapedValue = value.replaceAll('"""', '\\"""');
   // Expand a block string's raw value into independent lines.
   const lines = escapedValue.split(/\r\n|[\n\r]/g);
   const isSingleLine = lines.length === 1;
