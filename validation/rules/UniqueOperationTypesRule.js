@@ -1,12 +1,15 @@
-import { GraphQLError } from '../../error/GraphQLError.js';
+'use strict';
+Object.defineProperty(exports, '__esModule', { value: true });
+exports.UniqueOperationTypesRule = void 0;
+const GraphQLError_js_1 = require('../../error/GraphQLError.js');
 /**
  * Unique operation types
  *
  * A GraphQL document is only valid if it has only one type per operation.
  */
-export function UniqueOperationTypesRule(context) {
+function UniqueOperationTypesRule(context) {
   const schema = context.getSchema();
-  const definedOperationTypes = Object.create(null);
+  const definedOperationTypes = new Map();
   const existingOperationTypes = schema
     ? {
         query: schema.getQueryType(),
@@ -24,25 +27,26 @@ export function UniqueOperationTypesRule(context) {
     const operationTypesNodes = node.operationTypes ?? [];
     for (const operationType of operationTypesNodes) {
       const operation = operationType.operation;
-      const alreadyDefinedOperationType = definedOperationTypes[operation];
+      const alreadyDefinedOperationType = definedOperationTypes.get(operation);
       if (existingOperationTypes[operation]) {
         context.reportError(
-          new GraphQLError(
+          new GraphQLError_js_1.GraphQLError(
             `Type for ${operation} already defined in the schema. It cannot be redefined.`,
             { nodes: operationType },
           ),
         );
       } else if (alreadyDefinedOperationType) {
         context.reportError(
-          new GraphQLError(
+          new GraphQLError_js_1.GraphQLError(
             `There can be only one ${operation} type in schema.`,
             { nodes: [alreadyDefinedOperationType, operationType] },
           ),
         );
       } else {
-        definedOperationTypes[operation] = operationType;
+        definedOperationTypes.set(operation, operationType);
       }
     }
     return false;
   }
 }
+exports.UniqueOperationTypesRule = UniqueOperationTypesRule;

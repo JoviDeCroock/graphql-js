@@ -1,9 +1,8 @@
 {
   "name": "graphql",
-  "version": "17.0.0-alpha.1",
+  "version": "17.0.0-alpha.2",
   "description": "A Query Language and Runtime which can target any service.",
   "license": "MIT",
-  "type": "module",
   "typesVersions": {
     ">=4.4.0": {
       "*": [
@@ -30,20 +29,11 @@
     "graphql-js"
   ],
   "engines": {
-    "node": "^14.19.0 || ^16.10.0 || >=18.0.0"
+    "node": "^16.19.0 || ^18.14.0 || >=19.7.0"
   },
   "publishConfig": {
     "tag": "alpha"
   },
-  "exports": {
-    "./error": "./error/index.js",
-    "./execution": "./execution/index.js",
-    ".": "./index.js",
-    "./language": "./language/index.js",
-    "./type": "./type/index.js",
-    "./utilities": "./utilities/index.js",
-    "./validation": "./validation/index.js",
-    "./*.js": "./*.js",
-    "./*": "./*.js"
-  }
+  "main": "index",
+  "module": "index.mjs"
 }

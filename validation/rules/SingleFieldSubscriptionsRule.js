@@ -1,6 +1,12 @@
-import { GraphQLError } from '../../error/GraphQLError.js';
-import { Kind } from '../../language/kinds.js';
-import { collectFields } from '../../execution/collectFields.js';
+'use strict';
+Object.defineProperty(exports, '__esModule', { value: true });
+exports.SingleFieldSubscriptionsRule = void 0;
+const GraphQLError_js_1 = require('../../error/GraphQLError.js');
+const kinds_js_1 = require('../../language/kinds.js');
+const collectFields_js_1 = require('../../execution/collectFields.js');
+function toNodes(fieldGroup) {
+  return fieldGroup.fields.map((fieldDetails) => fieldDetails.node);
+}
 /**
  * Subscriptions must only include a non-introspection field.
  *
@@ -9,7 +15,7 @@ import { collectFields } from '../../execution/collectFields.js';
  *
  * See https://spec.graphql.org/draft/#sec-Single-root-field
  */
-export function SingleFieldSubscriptionsRule(context) {
+function SingleFieldSubscriptionsRule(context) {
   return {
     OperationDefinition(node) {
       if (node.operation === 'subscription') {
@@ -21,23 +27,25 @@ export function SingleFieldSubscriptionsRule(context) {
           const document = context.getDocument();
           const fragments = Object.create(null);
           for (const definition of document.definitions) {
-            if (definition.kind === Kind.FRAGMENT_DEFINITION) {
+            if (definition.kind === kinds_js_1.Kind.FRAGMENT_DEFINITION) {
               fragments[definition.name.value] = definition;
             }
           }
-          const { fields } = collectFields(
+          const { groupedFieldSet } = (0, collectFields_js_1.collectFields)(
             schema,
             fragments,
             variableValues,
             subscriptionType,
-            node.selectionSet,
+            node,
           );
-          if (fields.size > 1) {
-            const fieldSelectionLists = [...fields.values()];
-            const extraFieldSelectionLists = fieldSelectionLists.slice(1);
-            const extraFieldSelections = extraFieldSelectionLists.flat();
+          if (groupedFieldSet.size > 1) {
+            const fieldGroups = [...groupedFieldSet.values()];
+            const extraFieldGroups = fieldGroups.slice(1);
+            const extraFieldSelections = extraFieldGroups.flatMap(
+              (fieldGroup) => toNodes(fieldGroup),
+            );
             context.reportError(
-              new GraphQLError(
+              new GraphQLError_js_1.GraphQLError(
                 operationName != null
                   ? `Subscription "${operationName}" must select only one top level field.`
                   : 'Anonymous Subscription must select only one top level field.',
@@ -45,15 +53,15 @@ export function SingleFieldSubscriptionsRule(context) {
               ),
             );
           }
-          for (const fieldNodes of fields.values()) {
-            const fieldName = fieldNodes[0].name.value;
+          for (const fieldGroup of groupedFieldSet.values()) {
+            const fieldName = toNodes(fieldGroup)[0].name.value;
             if (fieldName.startsWith('__')) {
               context.reportError(
-                new GraphQLError(
+                new GraphQLError_js_1.GraphQLError(
                   operationName != null
                     ? `Subscription "${operationName}" must not select an introspection top level field.`
                     : 'Anonymous Subscription must not select an introspection top level field.',
-                  { nodes: fieldNodes },
+                  { nodes: toNodes(fieldGroup) },
                 ),
               );
             }
@@ -63,3 +71,4 @@ export function SingleFieldSubscriptionsRule(context) {
     },
   };
 }
+exports.SingleFieldSubscriptionsRule = SingleFieldSubscriptionsRule;

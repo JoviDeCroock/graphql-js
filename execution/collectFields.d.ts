@@ -2,17 +2,35 @@ import type { ObjMap } from '../jsutils/ObjMap.js';
 import type {
   FieldNode,
   FragmentDefinitionNode,
-  SelectionSetNode,
+  OperationDefinitionNode,
 } from '../language/ast.js';
 import type { GraphQLObjectType } from '../type/definition.js';
 import type { GraphQLSchema } from '../type/schema.js';
-export interface PatchFields {
+export interface DeferUsage {
   label: string | undefined;
-  fields: Map<string, ReadonlyArray<FieldNode>>;
+  ancestors: ReadonlyArray<Target>;
 }
-export interface FieldsAndPatches {
-  fields: Map<string, ReadonlyArray<FieldNode>>;
-  patches: Array<PatchFields>;
+export declare const NON_DEFERRED_TARGET_SET: TargetSet;
+export type Target = DeferUsage | undefined;
+export type TargetSet = ReadonlySet<Target>;
+export type DeferUsageSet = ReadonlySet<DeferUsage>;
+export interface FieldDetails {
+  node: FieldNode;
+  target: Target;
+}
+export interface FieldGroup {
+  fields: ReadonlyArray<FieldDetails>;
+  targets: TargetSet;
+}
+export type GroupedFieldSet = Map<string, FieldGroup>;
+export interface GroupedFieldSetDetails {
+  groupedFieldSet: GroupedFieldSet;
+  shouldInitiateDefer: boolean;
+}
+export interface CollectFieldsResult {
+  groupedFieldSet: GroupedFieldSet;
+  newGroupedFieldSetDetails: Map<DeferUsageSet, GroupedFieldSetDetails>;
+  newDeferUsages: ReadonlyArray<DeferUsage>;
 }
 /**
  * Given a selectionSet, collects all of the fields and returns them.
@@ -30,8 +48,8 @@ export declare function collectFields(
     [variable: string]: unknown;
   },
   runtimeType: GraphQLObjectType,
-  selectionSet: SelectionSetNode,
-): FieldsAndPatches;
+  operation: OperationDefinitionNode,
+): CollectFieldsResult;
 /**
  * Given an array of field nodes, collects all of the subfields of the passed
  * in fields, and returns them at the end.
@@ -48,6 +66,7 @@ export declare function collectSubfields(
   variableValues: {
     [variable: string]: unknown;
   },
+  operation: OperationDefinitionNode,
   returnType: GraphQLObjectType,
-  fieldNodes: ReadonlyArray<FieldNode>,
-): FieldsAndPatches;
+  fieldGroup: FieldGroup,
+): CollectFieldsResult;

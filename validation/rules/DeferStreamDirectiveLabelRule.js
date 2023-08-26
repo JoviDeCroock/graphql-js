@@ -1,21 +1,21 @@
-import { GraphQLError } from '../../error/GraphQLError.js';
-import { Kind } from '../../language/kinds.js';
-import {
-  GraphQLDeferDirective,
-  GraphQLStreamDirective,
-} from '../../type/directives.js';
+'use strict';
+Object.defineProperty(exports, '__esModule', { value: true });
+exports.DeferStreamDirectiveLabelRule = void 0;
+const GraphQLError_js_1 = require('../../error/GraphQLError.js');
+const kinds_js_1 = require('../../language/kinds.js');
+const directives_js_1 = require('../../type/directives.js');
 /**
- * Stream directive on list field
+ * Defer and stream directive labels are unique
  *
  * A GraphQL document is only valid if defer and stream directives' label argument is static and unique.
  */
-export function DeferStreamDirectiveLabelRule(context) {
-  const knownLabels = Object.create(null);
+function DeferStreamDirectiveLabelRule(context) {
+  const knownLabels = new Map();
   return {
     Directive(node) {
       if (
-        node.name.value === GraphQLDeferDirective.name ||
-        node.name.value === GraphQLStreamDirective.name
+        node.name.value === directives_js_1.GraphQLDeferDirective.name ||
+        node.name.value === directives_js_1.GraphQLStreamDirective.name
       ) {
         const labelArgument = node.arguments?.find(
           (arg) => arg.name.value === 'label',
@@ -24,24 +24,28 @@ export function DeferStreamDirectiveLabelRule(context) {
         if (!labelValue) {
           return;
         }
-        if (labelValue.kind !== Kind.STRING) {
+        if (labelValue.kind !== kinds_js_1.Kind.STRING) {
           context.reportError(
-            new GraphQLError(
+            new GraphQLError_js_1.GraphQLError(
               `Directive "${node.name.value}"'s label argument must be a static string.`,
               { nodes: node },
             ),
           );
-        } else if (knownLabels[labelValue.value]) {
+          return;
+        }
+        const knownLabel = knownLabels.get(labelValue.value);
+        if (knownLabel != null) {
           context.reportError(
-            new GraphQLError(
+            new GraphQLError_js_1.GraphQLError(
               'Defer/Stream directive label argument must be unique.',
-              { nodes: [knownLabels[labelValue.value], node] },
+              { nodes: [knownLabel, node] },
             ),
           );
         } else {
-          knownLabels[labelValue.value] = node;
+          knownLabels.set(labelValue.value, node);
         }
       }
     },
   };
 }
+exports.DeferStreamDirectiveLabelRule = DeferStreamDirectiveLabelRule;

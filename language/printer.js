@@ -1,13 +1,17 @@
-import { printBlockString } from './blockString.js';
-import { printString } from './printString.js';
-import { visit } from './visitor.js';
+'use strict';
+Object.defineProperty(exports, '__esModule', { value: true });
+exports.print = void 0;
+const blockString_js_1 = require('./blockString.js');
+const printString_js_1 = require('./printString.js');
+const visitor_js_1 = require('./visitor.js');
 /**
  * Converts an AST into a string, using one set of reasonable
  * formatting rules.
  */
-export function print(ast) {
-  return visit(ast, printDocASTReducer);
+function print(ast) {
+  return (0, visitor_js_1.visit)(ast, printDocASTReducer);
 }
+exports.print = print;
 const MAX_LINE_LENGTH = 80;
 const printDocASTReducer = {
   Name: { leave: (node) => node.value },
@@ -118,13 +122,28 @@ const printDocASTReducer = {
   FloatValue: { leave: ({ value }) => value },
   StringValue: {
     leave: ({ value, block: isBlockString }) =>
-      isBlockString ? printBlockString(value) : printString(value),
+      isBlockString === true
+        ? (0, blockString_js_1.printBlockString)(value)
+        : (0, printString_js_1.printString)(value),
   },
   BooleanValue: { leave: ({ value }) => (value ? 'true' : 'false') },
   NullValue: { leave: () => 'null' },
   EnumValue: { leave: ({ value }) => value },
-  ListValue: { leave: ({ values }) => '[' + join(values, ', ') + ']' },
-  ObjectValue: { leave: ({ fields }) => '{ ' + join(fields, ', ') + ' }' },
+  ListValue: {
+    leave: ({ values }) => {
+      const valuesLine = '[' + join(values, ', ') + ']';
+      if (valuesLine.length > MAX_LINE_LENGTH) {
+        return '[\n' + indent(join(values, '\n')) + '\n]';
+      }
+      return valuesLine;
+    },
+  },
+  ObjectValue: {
+    leave: ({ fields }) => {
+      const fieldsLine = '{ ' + join(fields, ', ') + ' }';
+      return fieldsLine.length > MAX_LINE_LENGTH ? block(fields) : fieldsLine;
+    },
+  },
   ObjectField: { leave: ({ name, value }) => name + ': ' + value },
   // Directive
   Directive: {
@@ -310,7 +329,7 @@ function wrap(start, maybeString, end = '') {
     : '';
 }
 function indent(str) {
-  return wrap('  ', str.replace(/\n/g, '\n  '));
+  return wrap('  ', str.replaceAll('\n', '\n  '));
 }
 function hasMultilineItems(maybeArray) {
   // FIXME: https://github.com/graphql/graphql-js/issues/2203

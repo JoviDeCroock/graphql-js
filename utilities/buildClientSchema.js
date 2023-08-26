@@ -1,28 +1,17 @@
-import { devAssert } from '../jsutils/devAssert.js';
-import { inspect } from '../jsutils/inspect.js';
-import { isObjectLike } from '../jsutils/isObjectLike.js';
-import { keyValMap } from '../jsutils/keyValMap.js';
-import { parseValue } from '../language/parser.js';
-import {
-  assertInterfaceType,
-  assertNullableType,
-  assertObjectType,
-  GraphQLEnumType,
-  GraphQLInputObjectType,
-  GraphQLInterfaceType,
-  GraphQLList,
-  GraphQLNonNull,
-  GraphQLObjectType,
-  GraphQLScalarType,
-  GraphQLUnionType,
-  isInputType,
-  isOutputType,
-} from '../type/definition.js';
-import { GraphQLDirective } from '../type/directives.js';
-import { introspectionTypes, TypeKind } from '../type/introspection.js';
-import { specifiedScalarTypes } from '../type/scalars.js';
-import { GraphQLSchema } from '../type/schema.js';
-import { valueFromAST } from './valueFromAST.js';
+'use strict';
+Object.defineProperty(exports, '__esModule', { value: true });
+exports.buildClientSchema = void 0;
+const devAssert_js_1 = require('../jsutils/devAssert.js');
+const inspect_js_1 = require('../jsutils/inspect.js');
+const isObjectLike_js_1 = require('../jsutils/isObjectLike.js');
+const keyValMap_js_1 = require('../jsutils/keyValMap.js');
+const parser_js_1 = require('../language/parser.js');
+const definition_js_1 = require('../type/definition.js');
+const directives_js_1 = require('../type/directives.js');
+const introspection_js_1 = require('../type/introspection.js');
+const scalars_js_1 = require('../type/scalars.js');
+const schema_js_1 = require('../type/schema.js');
+const valueFromAST_js_1 = require('./valueFromAST.js');
 /**
  * Build a GraphQLSchema for use by client tools.
  *
@@ -35,82 +24,94 @@ import { valueFromAST } from './valueFromAST.js';
  * This function expects a complete introspection result. Don't forget to check
  * the "errors" field of a server response before calling this function.
  */
-export function buildClientSchema(introspection, options) {
-  // Even even though `introspection` argument is typed in most cases it's received
-  // as untyped value from server, so we will do an additional check here.
-  (isObjectLike(introspection) && isObjectLike(introspection.__schema)) ||
-    devAssert(
+function buildClientSchema(introspection, options) {
+  // Even though the `introspection` argument is typed, in most cases it's received
+  // as an untyped value from the server, so we will do an additional check here.
+  ((0, isObjectLike_js_1.isObjectLike)(introspection) &&
+    (0, isObjectLike_js_1.isObjectLike)(introspection.__schema)) ||
+    (0, devAssert_js_1.devAssert)(
       false,
-      `Invalid or incomplete introspection result. Ensure that you are passing "data" property of introspection response and no "errors" was returned alongside: ${inspect(
-        introspection,
-      )}.`,
+      `Invalid or incomplete introspection result. Ensure that you are passing "data" property of introspection response and no "errors" was returned alongside: ${(0,
+      inspect_js_1.inspect)(introspection)}.`,
     );
   // Get the schema from the introspection result.
   const schemaIntrospection = introspection.__schema;
   // Iterate through all types, getting the type definition for each.
-  const typeMap = keyValMap(
-    schemaIntrospection.types,
-    (typeIntrospection) => typeIntrospection.name,
-    (typeIntrospection) => buildType(typeIntrospection),
+  const typeMap = new Map(
+    schemaIntrospection.types.map((typeIntrospection) => [
+      typeIntrospection.name,
+      buildType(typeIntrospection),
+    ]),
   );
   // Include standard types only if they are used.
-  for (const stdType of [...specifiedScalarTypes, ...introspectionTypes]) {
-    if (typeMap[stdType.name]) {
-      typeMap[stdType.name] = stdType;
+  for (const stdType of [
+    ...scalars_js_1.specifiedScalarTypes,
+    ...introspection_js_1.introspectionTypes,
+  ]) {
+    if (typeMap.has(stdType.name)) {
+      typeMap.set(stdType.name, stdType);
     }
   }
   // Get the root Query, Mutation, and Subscription types.
-  const queryType = schemaIntrospection.queryType
-    ? getObjectType(schemaIntrospection.queryType)
-    : null;
-  const mutationType = schemaIntrospection.mutationType
-    ? getObjectType(schemaIntrospection.mutationType)
-    : null;
-  const subscriptionType = schemaIntrospection.subscriptionType
-    ? getObjectType(schemaIntrospection.subscriptionType)
-    : null;
+  const queryType =
+    schemaIntrospection.queryType != null
+      ? getObjectType(schemaIntrospection.queryType)
+      : null;
+  const mutationType =
+    schemaIntrospection.mutationType != null
+      ? getObjectType(schemaIntrospection.mutationType)
+      : null;
+  const subscriptionType =
+    schemaIntrospection.subscriptionType != null
+      ? getObjectType(schemaIntrospection.subscriptionType)
+      : null;
   // Get the directives supported by Introspection, assuming empty-set if
   // directives were not queried for.
-  const directives = schemaIntrospection.directives
-    ? schemaIntrospection.directives.map(buildDirective)
-    : [];
+  const directives =
+    schemaIntrospection.directives != null
+      ? schemaIntrospection.directives.map(buildDirective)
+      : [];
   // Then produce and return a Schema with these types.
-  return new GraphQLSchema({
+  return new schema_js_1.GraphQLSchema({
     description: schemaIntrospection.description,
     query: queryType,
     mutation: mutationType,
     subscription: subscriptionType,
-    types: Object.values(typeMap),
+    types: [...typeMap.values()],
     directives,
     assumeValid: options?.assumeValid,
   });
   // Given a type reference in introspection, return the GraphQLType instance.
   // preferring cached instances before building new instances.
   function getType(typeRef) {
-    if (typeRef.kind === TypeKind.LIST) {
+    if (typeRef.kind === introspection_js_1.TypeKind.LIST) {
       const itemRef = typeRef.ofType;
-      if (!itemRef) {
+      if (itemRef == null) {
         throw new Error('Decorated type deeper than introspection query.');
       }
-      return new GraphQLList(getType(itemRef));
+      return new definition_js_1.GraphQLList(getType(itemRef));
     }
-    if (typeRef.kind === TypeKind.NON_NULL) {
+    if (typeRef.kind === introspection_js_1.TypeKind.NON_NULL) {
       const nullableRef = typeRef.ofType;
-      if (!nullableRef) {
+      if (nullableRef == null) {
         throw new Error('Decorated type deeper than introspection query.');
       }
       const nullableType = getType(nullableRef);
-      return new GraphQLNonNull(assertNullableType(nullableType));
+      return new definition_js_1.GraphQLNonNull(
+        (0, definition_js_1.assertNullableType)(nullableType),
+      );
     }
     return getNamedType(typeRef);
   }
   function getNamedType(typeRef) {
     const typeName = typeRef.name;
     if (!typeName) {
-      throw new Error(`Unknown type reference: ${inspect(typeRef)}.`);
+      throw new Error(
+        `Unknown type reference: ${(0, inspect_js_1.inspect)(typeRef)}.`,
+      );
     }
-    const type = typeMap[typeName];
-    if (!type) {
+    const type = typeMap.get(typeName);
+    if (type == null) {
       throw new Error(
         `Invalid or incomplete schema, unknown type: ${typeName}. Ensure that a full introspection query is used in order to build a client schema.`,
       );
@@ -118,10 +119,10 @@ export function buildClientSchema(introspection, options) {
     return type;
   }
   function getObjectType(typeRef) {
-    return assertObjectType(getNamedType(typeRef));
+    return (0, definition_js_1.assertObjectType)(getNamedType(typeRef));
   }
   function getInterfaceType(typeRef) {
-    return assertInterfaceType(getNamedType(typeRef));
+    return (0, definition_js_1.assertInterfaceType)(getNamedType(typeRef));
   }
   // Given a type's introspection result, construct the correct
   // GraphQLType instance.
@@ -131,27 +132,27 @@ export function buildClientSchema(introspection, options) {
       // FIXME: Properly type IntrospectionType, it's a breaking change so fix in v17
       // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
       switch (type.kind) {
-        case TypeKind.SCALAR:
+        case introspection_js_1.TypeKind.SCALAR:
           return buildScalarDef(type);
-        case TypeKind.OBJECT:
+        case introspection_js_1.TypeKind.OBJECT:
           return buildObjectDef(type);
-        case TypeKind.INTERFACE:
+        case introspection_js_1.TypeKind.INTERFACE:
           return buildInterfaceDef(type);
-        case TypeKind.UNION:
+        case introspection_js_1.TypeKind.UNION:
           return buildUnionDef(type);
-        case TypeKind.ENUM:
+        case introspection_js_1.TypeKind.ENUM:
           return buildEnumDef(type);
-        case TypeKind.INPUT_OBJECT:
+        case introspection_js_1.TypeKind.INPUT_OBJECT:
           return buildInputObjectDef(type);
       }
     }
-    const typeStr = inspect(type);
+    const typeStr = (0, inspect_js_1.inspect)(type);
     throw new Error(
       `Invalid or incomplete introspection result. Ensure that a full introspection query is used in order to build a client schema: ${typeStr}.`,
     );
   }
   function buildScalarDef(scalarIntrospection) {
-    return new GraphQLScalarType({
+    return new definition_js_1.GraphQLScalarType({
       name: scalarIntrospection.name,
       description: scalarIntrospection.description,
       specifiedByURL: scalarIntrospection.specifiedByURL,
@@ -162,12 +163,14 @@ export function buildClientSchema(introspection, options) {
     // 'interfaces' on interface types.
     if (
       implementingIntrospection.interfaces === null &&
-      implementingIntrospection.kind === TypeKind.INTERFACE
+      implementingIntrospection.kind === introspection_js_1.TypeKind.INTERFACE
     ) {
       return [];
     }
-    if (!implementingIntrospection.interfaces) {
-      const implementingIntrospectionStr = inspect(implementingIntrospection);
+    if (implementingIntrospection.interfaces == null) {
+      const implementingIntrospectionStr = (0, inspect_js_1.inspect)(
+        implementingIntrospection,
+      );
       throw new Error(
         `Introspection result missing interfaces: ${implementingIntrospectionStr}.`,
       );
@@ -175,7 +178,7 @@ export function buildClientSchema(introspection, options) {
     return implementingIntrospection.interfaces.map(getInterfaceType);
   }
   function buildObjectDef(objectIntrospection) {
-    return new GraphQLObjectType({
+    return new definition_js_1.GraphQLObjectType({
       name: objectIntrospection.name,
       description: objectIntrospection.description,
       interfaces: () => buildImplementationsList(objectIntrospection),
@@ -183,7 +186,7 @@ export function buildClientSchema(introspection, options) {
     });
   }
   function buildInterfaceDef(interfaceIntrospection) {
-    return new GraphQLInterfaceType({
+    return new definition_js_1.GraphQLInterfaceType({
       name: interfaceIntrospection.name,
       description: interfaceIntrospection.description,
       interfaces: () => buildImplementationsList(interfaceIntrospection),
@@ -191,29 +194,31 @@ export function buildClientSchema(introspection, options) {
     });
   }
   function buildUnionDef(unionIntrospection) {
-    if (!unionIntrospection.possibleTypes) {
-      const unionIntrospectionStr = inspect(unionIntrospection);
+    if (unionIntrospection.possibleTypes == null) {
+      const unionIntrospectionStr = (0, inspect_js_1.inspect)(
+        unionIntrospection,
+      );
       throw new Error(
         `Introspection result missing possibleTypes: ${unionIntrospectionStr}.`,
       );
     }
-    return new GraphQLUnionType({
+    return new definition_js_1.GraphQLUnionType({
       name: unionIntrospection.name,
       description: unionIntrospection.description,
       types: () => unionIntrospection.possibleTypes.map(getObjectType),
     });
   }
   function buildEnumDef(enumIntrospection) {
-    if (!enumIntrospection.enumValues) {
-      const enumIntrospectionStr = inspect(enumIntrospection);
+    if (enumIntrospection.enumValues == null) {
+      const enumIntrospectionStr = (0, inspect_js_1.inspect)(enumIntrospection);
       throw new Error(
         `Introspection result missing enumValues: ${enumIntrospectionStr}.`,
       );
     }
-    return new GraphQLEnumType({
+    return new definition_js_1.GraphQLEnumType({
       name: enumIntrospection.name,
       description: enumIntrospection.description,
-      values: keyValMap(
+      values: (0, keyValMap_js_1.keyValMap)(
         enumIntrospection.enumValues,
         (valueIntrospection) => valueIntrospection.name,
         (valueIntrospection) => ({
@@ -224,25 +229,29 @@ export function buildClientSchema(introspection, options) {
     });
   }
   function buildInputObjectDef(inputObjectIntrospection) {
-    if (!inputObjectIntrospection.inputFields) {
-      const inputObjectIntrospectionStr = inspect(inputObjectIntrospection);
+    if (inputObjectIntrospection.inputFields == null) {
+      const inputObjectIntrospectionStr = (0, inspect_js_1.inspect)(
+        inputObjectIntrospection,
+      );
       throw new Error(
         `Introspection result missing inputFields: ${inputObjectIntrospectionStr}.`,
       );
     }
-    return new GraphQLInputObjectType({
+    return new definition_js_1.GraphQLInputObjectType({
       name: inputObjectIntrospection.name,
       description: inputObjectIntrospection.description,
       fields: () => buildInputValueDefMap(inputObjectIntrospection.inputFields),
     });
   }
   function buildFieldDefMap(typeIntrospection) {
-    if (!typeIntrospection.fields) {
+    if (typeIntrospection.fields == null) {
       throw new Error(
-        `Introspection result missing fields: ${inspect(typeIntrospection)}.`,
+        `Introspection result missing fields: ${(0, inspect_js_1.inspect)(
+          typeIntrospection,
+        )}.`,
       );
     }
-    return keyValMap(
+    return (0, keyValMap_js_1.keyValMap)(
       typeIntrospection.fields,
       (fieldIntrospection) => fieldIntrospection.name,
       buildField,
@@ -250,14 +259,16 @@ export function buildClientSchema(introspection, options) {
   }
   function buildField(fieldIntrospection) {
     const type = getType(fieldIntrospection.type);
-    if (!isOutputType(type)) {
-      const typeStr = inspect(type);
+    if (!(0, definition_js_1.isOutputType)(type)) {
+      const typeStr = (0, inspect_js_1.inspect)(type);
       throw new Error(
         `Introspection must provide output type for fields, but received: ${typeStr}.`,
       );
     }
-    if (!fieldIntrospection.args) {
-      const fieldIntrospectionStr = inspect(fieldIntrospection);
+    if (fieldIntrospection.args == null) {
+      const fieldIntrospectionStr = (0, inspect_js_1.inspect)(
+        fieldIntrospection,
+      );
       throw new Error(
         `Introspection result missing field args: ${fieldIntrospectionStr}.`,
       );
@@ -270,7 +281,7 @@ export function buildClientSchema(introspection, options) {
     };
   }
   function buildInputValueDefMap(inputValueIntrospections) {
-    return keyValMap(
+    return (0, keyValMap_js_1.keyValMap)(
       inputValueIntrospections,
       (inputValue) => inputValue.name,
       buildInputValue,
@@ -278,15 +289,18 @@ export function buildClientSchema(introspection, options) {
   }
   function buildInputValue(inputValueIntrospection) {
     const type = getType(inputValueIntrospection.type);
-    if (!isInputType(type)) {
-      const typeStr = inspect(type);
+    if (!(0, definition_js_1.isInputType)(type)) {
+      const typeStr = (0, inspect_js_1.inspect)(type);
       throw new Error(
         `Introspection must provide input type for arguments, but received: ${typeStr}.`,
       );
     }
     const defaultValue =
       inputValueIntrospection.defaultValue != null
-        ? valueFromAST(parseValue(inputValueIntrospection.defaultValue), type)
+        ? (0, valueFromAST_js_1.valueFromAST)(
+            (0, parser_js_1.parseValue)(inputValueIntrospection.defaultValue),
+            type,
+          )
         : undefined;
     return {
       description: inputValueIntrospection.description,
@@ -296,19 +310,23 @@ export function buildClientSchema(introspection, options) {
     };
   }
   function buildDirective(directiveIntrospection) {
-    if (!directiveIntrospection.args) {
-      const directiveIntrospectionStr = inspect(directiveIntrospection);
+    if (directiveIntrospection.args == null) {
+      const directiveIntrospectionStr = (0, inspect_js_1.inspect)(
+        directiveIntrospection,
+      );
       throw new Error(
         `Introspection result missing directive args: ${directiveIntrospectionStr}.`,
       );
     }
-    if (!directiveIntrospection.locations) {
-      const directiveIntrospectionStr = inspect(directiveIntrospection);
+    if (directiveIntrospection.locations == null) {
+      const directiveIntrospectionStr = (0, inspect_js_1.inspect)(
+        directiveIntrospection,
+      );
       throw new Error(
         `Introspection result missing directive locations: ${directiveIntrospectionStr}.`,
       );
     }
-    return new GraphQLDirective({
+    return new directives_js_1.GraphQLDirective({
       name: directiveIntrospection.name,
       description: directiveIntrospection.description,
       isRepeatable: directiveIntrospection.isRepeatable,
@@ -317,3 +335,4 @@ export function buildClientSchema(introspection, options) {
     });
   }
 }
+exports.buildClientSchema = buildClientSchema;
