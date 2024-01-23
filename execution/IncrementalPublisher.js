@@ -26,6 +26,7 @@ const promiseWithResolvers_js_1 = require('../jsutils/promiseWithResolvers.js');
  */
 class IncrementalPublisher {
   constructor() {
+    this._nextId = 0;
     this._released = new Set();
     this._pending = new Set();
     this._reset();
@@ -153,7 +154,10 @@ class IncrementalPublisher {
     const pendingResults = [];
     for (const pendingSource of pendingSources) {
       pendingSource.pendingSent = true;
+      const id = this._getNextId();
+      pendingSource.id = id;
       const pendingResult = {
+        id,
         path: pendingSource.path,
       };
       if (pendingSource.label !== undefined) {
@@ -162,6 +166,9 @@ class IncrementalPublisher {
       pendingResults.push(pendingResult);
     }
     return pendingResults;
+  }
+  _getNextId() {
+    return String(this._nextId++);
   }
   _subscribe() {
     let isDone = false;
@@ -300,8 +307,12 @@ class IncrementalPublisher {
           continue;
         }
         const incrementalResult = {
+          // safe because `items` is always defined when the record is completed
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           items: subsequentResultRecord.items,
-          path: subsequentResultRecord.streamRecord.path,
+          // safe because `id` is defined once the stream has been released as pending
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          id: subsequentResultRecord.streamRecord.id,
         };
         if (subsequentResultRecord.errors.length > 0) {
           incrementalResult.errors = subsequentResultRecord.errors;
@@ -318,11 +329,9 @@ class IncrementalPublisher {
         for (const deferredGroupedFieldSetRecord of subsequentResultRecord.deferredGroupedFieldSetRecords) {
           if (!deferredGroupedFieldSetRecord.sent) {
             deferredGroupedFieldSetRecord.sent = true;
-            const incrementalResult = {
-              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-              data: deferredGroupedFieldSetRecord.data,
-              path: deferredGroupedFieldSetRecord.path,
-            };
+            const incrementalResult = this._getIncrementalDeferResult(
+              deferredGroupedFieldSetRecord,
+            );
             if (deferredGroupedFieldSetRecord.errors.length > 0) {
               incrementalResult.errors = deferredGroupedFieldSetRecord.errors;
             }
@@ -337,13 +346,43 @@ class IncrementalPublisher {
       completed: completedResults,
     };
   }
+  _getIncrementalDeferResult(deferredGroupedFieldSetRecord) {
+    const { data, deferredFragmentRecords } = deferredGroupedFieldSetRecord;
+    let maxLength;
+    let idWithLongestPath;
+    for (const deferredFragmentRecord of deferredFragmentRecords) {
+      const id = deferredFragmentRecord.id;
+      if (id === undefined) {
+        continue;
+      }
+      const length = deferredFragmentRecord.path.length;
+      if (maxLength === undefined || length > maxLength) {
+        maxLength = length;
+        idWithLongestPath = id;
+      }
+    }
+    const subPath = deferredGroupedFieldSetRecord.path.slice(maxLength);
+    const incrementalDeferResult = {
+      // safe because `data``is always defined when the record is completed
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      data: data,
+      // safe because `id` is always defined once the fragment has been released
+      // as pending and at least one fragment has been completed, so must have been
+      // released as pending
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      id: idWithLongestPath,
+    };
+    if (subPath.length > 0) {
+      incrementalDeferResult.subPath = subPath;
+    }
+    return incrementalDeferResult;
+  }
   _completedRecordToResult(completedRecord) {
     const result = {
-      path: completedRecord.path,
+      // safe because `id` is defined once the stream has been released as pending
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      id: completedRecord.id,
     };
-    if (completedRecord.label !== undefined) {
-      result.label = completedRecord.label;
-    }
     if (completedRecord.errors.length > 0) {
       result.errors = completedRecord.errors;
     }
@@ -358,10 +397,13 @@ class IncrementalPublisher {
       this._introduce(subsequentResultRecord);
       return;
     }
-    if (subsequentResultRecord._pending.size === 0) {
-      this._push(subsequentResultRecord);
-    } else {
+    if (subsequentResultRecord._pending.size > 0) {
       this._introduce(subsequentResultRecord);
+    } else if (
+      subsequentResultRecord.deferredGroupedFieldSetRecords.size > 0 ||
+      subsequentResultRecord.children.size > 0
+    ) {
+      this._push(subsequentResultRecord);
     }
   }
   _getChildren(erroringIncrementalDataRecord) {
@@ -466,7 +508,6 @@ class StreamItemsRecord {
     this.errors = [];
     this.isCompleted = false;
     this.filtered = false;
-    this.items = [];
   }
 }
 exports.StreamItemsRecord = StreamItemsRecord;
