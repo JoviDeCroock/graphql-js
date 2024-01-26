@@ -1,6 +1,4 @@
 import type { Maybe } from '../jsutils/Maybe.js';
-// TODO: remove ObjMap as we leverage Map everywhere
-import type { ObjMap } from '../jsutils/ObjMap.js';
 
 import type {
   ArgumentNode,
@@ -36,7 +34,7 @@ export function substituteFragmentArguments(
   );
   return visit(def.selectionSet, {
     Variable(node) {
-      return argumentValues[node.name.value];
+      return argumentValues.get(node.name.value);
     },
   });
 }
@@ -44,23 +42,23 @@ export function substituteFragmentArguments(
 export function fragmentArgumentSubstitutions(
   variableDefinitions: ReadonlyArray<VariableDefinitionNode>,
   argumentValues: Maybe<ReadonlyArray<ArgumentNode>>,
-): ObjMap<ValueNode> {
-  const substitutions: ObjMap<ValueNode> = {};
+): Map<string, ValueNode>  {
+  const substitutions = new Map<string, ValueNode>();
   if (argumentValues) {
     for (const argument of argumentValues) {
-      substitutions[argument.name.value] = argument.value;
+      substitutions.set(argument.name.value, argument.value);
     }
   }
 
   for (const variableDefinition of variableDefinitions) {
     const argumentName = variableDefinition.variable.name.value;
-    if (substitutions[argumentName]) {
+    if (substitutions.has(argumentName)) {
       continue;
     }
 
     const defaultValue = variableDefinition.defaultValue;
     if (defaultValue) {
-      substitutions[argumentName] = defaultValue;
+      substitutions.set(argumentName, defaultValue);
     } else {
       // We need a way to allow unset arguments without accidentally
       // replacing an unset fragment argument with an operation
@@ -71,10 +69,10 @@ export function fragmentArgumentSubstitutions(
       //    - make unset fragment arguments invalid
       // Requiring the spread to pass all non-default-defined arguments is nice,
       // but makes field argument default values impossible to use.
-      substitutions[argumentName] = {
+      substitutions.set(argumentName, {
         kind: Kind.VARIABLE,
         name: { kind: Kind.NAME, value: '__UNSET' },
-      };
+      });
     }
   }
   return substitutions;
