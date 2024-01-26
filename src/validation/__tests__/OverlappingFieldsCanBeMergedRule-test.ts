@@ -1,5 +1,3 @@
-import { describe, it } from 'mocha';
-
 import type { GraphQLSchema } from '../../type/schema.js';
 
 import { buildSchema } from '../../utilities/buildASTSchema.js';
@@ -1325,9 +1323,9 @@ describe('Validate: Overlapping fields can be merged', () => {
             'Fields "mother" conflict because subfields "doesKnowCommand" conflict because they have differing arguments. Use different aliases on the fields to fetch both if this was intentional.',
           locations: [
             { line: 5, column: 13 },
-            { line: 14, column: 13 },
-            { line: 13, column: 11 },
+            { line: 13, column: 13 },
             { line: 12, column: 11 },
+            { line: 11, column: 11 },
           ],
         },
       ]);
@@ -1361,9 +1359,9 @@ describe('Validate: Overlapping fields can be merged', () => {
             { line: 3, column: 11 },
             { line: 4, column: 13 },
             { line: 5, column: 15 },
-            { line: 12, column: 11 },
-            { line: 13, column: 13 },
-            { line: 14, column: 15 },
+            { line: 11, column: 11 },
+            { line: 12, column: 13 },
+            { line: 13, column: 15 },
           ],
         },
       ]);

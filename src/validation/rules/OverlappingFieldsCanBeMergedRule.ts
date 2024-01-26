@@ -35,6 +35,7 @@ import { substituteFragmentArguments } from '../../utilities/substituteFragmentA
 import { typeFromAST } from '../../utilities/typeFromAST.js';
 
 import type { ValidationContext } from '../ValidationContext.js';
+import type { ObjMap } from '../../jsutils/ObjMap.js';
 
 /* eslint-disable max-params */
 // This file contains a lot of such errors but we plan to refactor it anyway
@@ -144,7 +145,7 @@ type NodeAndDef = [
 ];
 // Map of array of those.
 type NodeAndDefCollection = Map<string, Array<NodeAndDef>>;
-type FragmentSpreadsByKey = Map<string, FragmentSpreadNode>;
+type FragmentSpreadsByKey = ObjMap<FragmentSpreadNode>;
 type FieldsAndFragmentSpreads = readonly [
   NodeAndDefCollection,
   FragmentSpreadsByKey,
@@ -854,7 +855,7 @@ function getFieldsAndFragmentSpreads(
     return cached;
   }
   const nodeAndDefs: NodeAndDefCollection = new Map();
-  const fragmentSpreads = new Map<string, FragmentSpreadNode>();
+  const fragmentSpreads: ObjMap<FragmentSpreadNode> = Object.create(null);
   _collectFieldsAndFragmentSpreads(
     context,
     parentType,
@@ -862,7 +863,7 @@ function getFieldsAndFragmentSpreads(
     nodeAndDefs,
     fragmentSpreads,
   );
-  const result = [nodeAndDefs, { ...fragmentSpreads }] as const;
+  const result = [nodeAndDefs, fragmentSpreads] as const;
   cachedFieldsAndFragmentSpreads.set(selectionSet, result);
   return result;
 }
@@ -929,7 +930,7 @@ function _collectFieldsAndFragmentSpreads(
         break;
       }
       case Kind.FRAGMENT_SPREAD:
-        fragmentSpreads.set(keyForFragmentSpread(selection), selection);
+        fragmentSpreads[keyForFragmentSpread(selection)] = selection;
         break;
       case Kind.INLINE_FRAGMENT: {
         const typeCondition = selection.typeCondition;
