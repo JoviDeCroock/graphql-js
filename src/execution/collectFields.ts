@@ -22,6 +22,8 @@ import {
 } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
+import { keyForFragmentSpread } from '../utilities/keyForFragmentSpread.js';
+import { substituteFragmentArguments } from '../utilities/substituteFragmentArguments.js';
 import { typeFromAST } from '../utilities/typeFromAST.js';
 
 import { getDirectiveValues } from './values.js';
@@ -42,7 +44,7 @@ interface CollectFieldsContext {
   variableValues: { [variable: string]: unknown };
   operation: OperationDefinitionNode;
   runtimeType: GraphQLObjectType;
-  visitedFragmentNames: Set<string>;
+  visitedFragmentKeys: Set<string>,
 }
 
 /**
@@ -68,7 +70,7 @@ export function collectFields(
     variableValues,
     runtimeType,
     operation,
-    visitedFragmentNames: new Set(),
+    visitedFragmentKeys: new Set(),
   };
 
   collectFieldsImpl(context, operation.selectionSet, groupedFieldSet);
@@ -100,7 +102,7 @@ export function collectSubfields(
     variableValues,
     runtimeType: returnType,
     operation,
-    visitedFragmentNames: new Set(),
+    visitedFragmentKeys: new Set(),
   };
   const subGroupedFieldSet = new AccumulatorMap<string, FieldDetails>();
 
@@ -132,7 +134,7 @@ function collectFieldsImpl(
     variableValues,
     runtimeType,
     operation,
-    visitedFragmentNames,
+    visitedFragmentKeys,
   } = context;
 
   for (const selection of selectionSet.selections) {
@@ -173,7 +175,8 @@ function collectFieldsImpl(
         break;
       }
       case Kind.FRAGMENT_SPREAD: {
-        const fragName = selection.name.value;
+        // TODO: follow up on https://github.com/graphql/graphql-js/pull/3835/files#r1101002452
+        const fragmentKey = keyForFragmentSpread(selection);
 
         const newDeferUsage = getDeferUsage(
           operation,
@@ -184,13 +187,13 @@ function collectFieldsImpl(
 
         if (
           !newDeferUsage &&
-          (visitedFragmentNames.has(fragName) ||
+          (visitedFragmentKeys.has(fragmentKey) ||
             !shouldIncludeNode(variableValues, selection))
         ) {
           continue;
         }
 
-        const fragment = fragments[fragName];
+        const fragment = fragments[selection.name.value];
         if (
           fragment == null ||
           !doesFragmentConditionMatch(schema, fragment, runtimeType)
@@ -198,12 +201,17 @@ function collectFieldsImpl(
           continue;
         }
         if (!newDeferUsage) {
-          visitedFragmentNames.add(fragName);
+          visitedFragmentKeys.add(fragmentKey);
         }
+
+        const fragmentSelectionSet = substituteFragmentArguments(
+          fragment,
+          selection,
+        );
 
         collectFieldsImpl(
           context,
-          fragment.selectionSet,
+          fragmentSelectionSet,
           groupedFieldSet,
           parentDeferUsage,
           newDeferUsage ?? deferUsage,
