@@ -160,7 +160,15 @@ function executeQuery(
   query: string,
   variableValues?: { [variable: string]: unknown },
 ) {
-  const document = parse(query);
+  const document = parse(query;
+  return executeSync({ schema, document, variableValues });
+}
+
+function executeQueryWithFragmentArguments(
+  query: string,
+  variableValues?: { [variable: string]: unknown },
+) {
+  const document = parse(query, { experimentalFragmentArguments: true });
   return executeSync({ schema, document, variableValues });
 }
 
@@ -1150,7 +1158,7 @@ describe('Execute: Handles inputs', () => {
 
   describe('using fragment arguments', () => {
     it('when there are no fragment arguments', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query {
           ...a
         }
@@ -1166,7 +1174,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when a value is required and provided', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query {
           ...a(value: "A")
         }
@@ -1182,7 +1190,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when a value is required and not provided', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query {
           ...a
         }
@@ -1198,7 +1206,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when the definition has a default and is provided', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query {
           ...a(value: "A")
         }
@@ -1214,7 +1222,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when the definition has a default and is not provided', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query {
           ...a
         }
@@ -1230,7 +1238,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when the definition has a non-nullable default and is provided null', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query {
           ...a(value: null)
         }
@@ -1246,7 +1254,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when the definition has no default and is not provided', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query {
           ...a
         }
@@ -1263,7 +1271,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when an argument is shadowed by an operation variable', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query($x: String! = "A") {
           ...a(x: "B")
         }
@@ -1279,7 +1287,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when a nullable argument with a field default is not provided and shadowed by an operation variable', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query($x: String = "A") {
           ...a
         }
@@ -1296,7 +1304,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when a fragment is used with different args', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query($x: String = "Hello") {
           a: nested {
             ...a(x: "a")
@@ -1329,7 +1337,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when the argument variable is nested in a complex type', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query {
           ...a(value: "C")
         }
@@ -1345,7 +1353,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when argument variables are used recursively', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query {
           ...a(aValue: "C")
         }
@@ -1364,7 +1372,7 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when argument passed in as list', () => {
-      const result = executeQuery(`
+      const result = executeQueryWithFragmentArguments(`
         query Q($opValue: String = "op") {
           ...a(aValue: "A")
         }
