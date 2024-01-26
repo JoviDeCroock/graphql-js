@@ -393,7 +393,6 @@ describe('Validate: Provided required arguments', () => {
       expectValid(`
           {
             ...F
-            
           }
           fragment F($x: Int = 3) on Query {
             foo
@@ -405,7 +404,6 @@ describe('Validate: Provided required arguments', () => {
       expectValid(`
           {
             ...F
-            
           }
           fragment F($x: Int) on Query {
             foo
@@ -416,7 +414,6 @@ describe('Validate: Provided required arguments', () => {
       expectValid(`
           {
             ...F
-            
           }
           fragment F($x: Int! = 3) on Query {
             foo
@@ -427,7 +424,6 @@ describe('Validate: Provided required arguments', () => {
       expectErrors(`
           {
             ...F
-            
           }
           fragment F($x: Int!) on Query {
             foo
@@ -448,7 +444,6 @@ describe('Validate: Provided required arguments', () => {
       expectValid(`
           {
             ...F(x: 3)
-            
           }
           fragment F($x: Int!) on Query {
             foo
