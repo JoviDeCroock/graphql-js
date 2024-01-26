@@ -175,7 +175,6 @@ function collectFieldsImpl(
         break;
       }
       case Kind.FRAGMENT_SPREAD: {
-        // TODO: follow up on https://github.com/graphql/graphql-js/pull/3835/files#r1101002452
         const fragmentKey = keyForFragmentSpread(selection);
 
         const newDeferUsage = getDeferUsage(

@@ -11,8 +11,6 @@ import type {
 import { Kind } from '../language/kinds.js';
 import { visit } from '../language/visitor.js';
 
-// TODO: follow up on https://github.com/graphql/graphql-js/pull/3835/files#r1101010604
-
 /**
  * Replaces all fragment argument values with non-fragment-scoped values.
  *
@@ -24,14 +22,19 @@ export function substituteFragmentArguments(
   def: FragmentDefinitionNode,
   fragmentSpread: FragmentSpreadNode,
 ): SelectionSetNode {
-  const argumentDefinitions = def.variableDefinitions;
-  if (argumentDefinitions == null || argumentDefinitions.length === 0) {
+  const fragmentVariableDefinitions = def.variableDefinitions;
+  if (fragmentVariableDefinitions == null || fragmentVariableDefinitions.length === 0) {
     return def.selectionSet;
   }
+
+  // We check whether we have arguments given by the fragment-spread
+  // we then replace our variable definitions in the fragment-definition
+  // with the values passed in by the spread.
   const argumentValues = fragmentArgumentSubstitutions(
-    argumentDefinitions,
+    fragmentVariableDefinitions,
     fragmentSpread.arguments,
   );
+
   return visit(def.selectionSet, {
     Variable(node) {
       return argumentValues.get(node.name.value);
@@ -51,25 +54,26 @@ export function fragmentArgumentSubstitutions(
   }
 
   for (const variableDefinition of variableDefinitions) {
-    const argumentName = variableDefinition.variable.name.value;
-    if (substitutions.has(argumentName)) {
+    const variableName = variableDefinition.variable.name.value;
+    if (substitutions.has(variableName)) {
       continue;
     }
 
     const defaultValue = variableDefinition.defaultValue;
     if (defaultValue) {
-      substitutions.set(argumentName, defaultValue);
+      substitutions.set(variableName, defaultValue);
     } else {
       // We need a way to allow unset arguments without accidentally
       // replacing an unset fragment argument with an operation
       // variable value. Fragment arguments must always have LOCAL scope.
       //
-      // To remove this hack, we need to either:
+      // TODO: To remove this hack, we need to either:
       //    - include fragment argument scope when evaluating fields
       //    - make unset fragment arguments invalid
+      //
       // Requiring the spread to pass all non-default-defined arguments is nice,
       // but makes field argument default values impossible to use.
-      substitutions.set(argumentName, {
+      substitutions.set(variableName, {
         kind: Kind.VARIABLE,
         name: { kind: Kind.NAME, value: '__UNSET' },
       });
