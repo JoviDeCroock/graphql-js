@@ -22,7 +22,6 @@ import {
 } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
-import { keyForFragmentSpread } from '../utilities/keyForFragmentSpread.js';
 import { substituteFragmentArguments } from '../utilities/substituteFragmentArguments.js';
 import { typeFromAST } from '../utilities/typeFromAST.js';
 
@@ -44,7 +43,7 @@ interface CollectFieldsContext {
   variableValues: { [variable: string]: unknown };
   operation: OperationDefinitionNode;
   runtimeType: GraphQLObjectType;
-  visitedFragmentKeys: Set<string>;
+  visitedFragmentNames: Set<string>;
 }
 
 /**
@@ -70,7 +69,7 @@ export function collectFields(
     variableValues,
     runtimeType,
     operation,
-    visitedFragmentKeys: new Set(),
+    visitedFragmentNames: new Set(),
   };
 
   collectFieldsImpl(context, operation.selectionSet, groupedFieldSet);
@@ -102,7 +101,7 @@ export function collectSubfields(
     variableValues,
     runtimeType: returnType,
     operation,
-    visitedFragmentKeys: new Set(),
+    visitedFragmentNames: new Set(),
   };
   const subGroupedFieldSet = new AccumulatorMap<string, FieldDetails>();
 
@@ -134,7 +133,7 @@ function collectFieldsImpl(
     variableValues,
     runtimeType,
     operation,
-    visitedFragmentKeys,
+    visitedFragmentNames,
   } = context;
 
   for (const selection of selectionSet.selections) {
@@ -175,7 +174,7 @@ function collectFieldsImpl(
         break;
       }
       case Kind.FRAGMENT_SPREAD: {
-        const fragmentKey = keyForFragmentSpread(selection);
+        const fragmentName = selection.name.value;
 
         const newDeferUsage = getDeferUsage(
           operation,
@@ -186,13 +185,13 @@ function collectFieldsImpl(
 
         if (
           !newDeferUsage &&
-          (visitedFragmentKeys.has(fragmentKey) ||
+          (visitedFragmentNames.has(fragmentName) ||
             !shouldIncludeNode(variableValues, selection))
         ) {
           continue;
         }
 
-        const fragment = fragments[selection.name.value];
+        const fragment = fragments[fragmentName];
         if (
           fragment == null ||
           !doesFragmentConditionMatch(schema, fragment, runtimeType)
@@ -201,7 +200,7 @@ function collectFieldsImpl(
         }
 
         if (!newDeferUsage) {
-          visitedFragmentKeys.add(fragmentKey);
+          visitedFragmentNames.add(fragmentName);
         }
 
         const fragmentSelectionSet = substituteFragmentArguments(

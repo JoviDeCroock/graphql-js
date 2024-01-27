@@ -11,8 +11,6 @@ import type {
 import { Kind } from '../language/kinds.js';
 import { visit } from '../language/visitor.js';
 
-// TODO: follow up on https://github.com/graphql/graphql-js/pull/3835/files#r1101010604
-
 /**
  * Replaces all fragment argument values with non-fragment-scoped values.
  *
