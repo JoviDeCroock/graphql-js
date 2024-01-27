@@ -22,14 +22,16 @@ export function substituteFragmentArguments(
   def: FragmentDefinitionNode,
   fragmentSpread: FragmentSpreadNode,
 ): SelectionSetNode {
-  const argumentDefinitions = def.variableDefinitions;
-  if (argumentDefinitions == null || argumentDefinitions.length === 0) {
+  const fragmentDefinitionVariables = def.variableDefinitions;
+  if (fragmentDefinitionVariables == null || fragmentDefinitionVariables.length === 0) {
     return def.selectionSet;
   }
+
   const argumentValues = fragmentArgumentSubstitutions(
-    argumentDefinitions,
+    fragmentDefinitionVariables,
     fragmentSpread.arguments,
   );
+
   return visit(def.selectionSet, {
     Variable(node) {
       return argumentValues.get(node.name.value);
