@@ -35,12 +35,12 @@ export interface DeferUsage {
 export interface FieldDetails {
   node: FieldNode;
   deferUsage: DeferUsage | undefined;
+  variableValues: Record<string, any>
 }
 
 interface CollectFieldsContext {
   schema: GraphQLSchema;
   fragments: ObjMap<FragmentDefinitionNode>;
-  variableValues: { [variable: string]: unknown };
   operation: OperationDefinitionNode;
   runtimeType: GraphQLObjectType;
   visitedFragmentNames: Set<string>;
@@ -66,13 +66,12 @@ export function collectFields(
   const context: CollectFieldsContext = {
     schema,
     fragments,
-    variableValues,
     runtimeType,
     operation,
     visitedFragmentNames: new Set(),
   };
 
-  collectFieldsImpl(context, operation.selectionSet, groupedFieldSet);
+  collectFieldsImpl(context, operation.selectionSet, groupedFieldSet, variableValues);
   return groupedFieldSet;
 }
 
@@ -98,7 +97,6 @@ export function collectSubfields(
   const context: CollectFieldsContext = {
     schema,
     fragments,
-    variableValues,
     runtimeType: returnType,
     operation,
     visitedFragmentNames: new Set(),
@@ -112,6 +110,7 @@ export function collectSubfields(
         context,
         node.selectionSet,
         subGroupedFieldSet,
+        variableValues,
         fieldDetail.deferUsage,
       );
     }
@@ -124,13 +123,13 @@ function collectFieldsImpl(
   context: CollectFieldsContext,
   selectionSet: SelectionSetNode,
   groupedFieldSet: AccumulatorMap<string, FieldDetails>,
+  variableValues: Record<string, any>,
   parentDeferUsage?: DeferUsage,
   deferUsage?: DeferUsage,
 ): void {
   const {
     schema,
     fragments,
-    variableValues,
     runtimeType,
     operation,
     visitedFragmentNames,
@@ -142,10 +141,13 @@ function collectFieldsImpl(
         if (!shouldIncludeNode(variableValues, selection)) {
           continue;
         }
+
         groupedFieldSet.add(getFieldEntryKey(selection), {
           node: selection,
           deferUsage: deferUsage ?? parentDeferUsage,
+          variableValues
         });
+
         break;
       }
       case Kind.INLINE_FRAGMENT: {
@@ -167,6 +169,7 @@ function collectFieldsImpl(
           context,
           selection.selectionSet,
           groupedFieldSet,
+          variableValues,
           parentDeferUsage,
           newDeferUsage ?? deferUsage,
         );
@@ -208,12 +211,19 @@ function collectFieldsImpl(
           selection,
         );
 
+        const spreadVariableValues = selection.arguments?.reduce((acc, arg) => ({
+          ...acc,
+          [arg.name.value]: arg.value.kind === Kind.VARIABLE ? : arg.value.
+        }), {})
+
         collectFieldsImpl(
           context,
           fragmentSelectionSet,
           groupedFieldSet,
+          selection.arguments?.length ? spreadVariableValues : variableValues,
           parentDeferUsage,
           newDeferUsage ?? deferUsage,
+          fragment.
         );
         break;
       }

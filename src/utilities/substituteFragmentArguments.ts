@@ -21,22 +21,37 @@ import { visit } from '../language/visitor.js';
 export function substituteFragmentArguments(
   def: FragmentDefinitionNode,
   fragmentSpread: FragmentSpreadNode,
-): SelectionSetNode {
+): Record<string, any> {
   const fragmentDefinitionVariables = def.variableDefinitions;
   if (fragmentDefinitionVariables == null || fragmentDefinitionVariables.length === 0) {
     return def.selectionSet;
   }
 
-  const argumentValues = fragmentArgumentSubstitutions(
+  const substitutions = new Map<string, ValueNode>();
+  if (fragmentSpread.arguments) {
+    for (const argument of fragmentSpread.arguments) {
+      substitutions.set(argument.name.value, argument.value);
+    }
+  }
+
+  return fragmentDefinitionVariables.reduce((acc, variableDefinition) => {
+    const key = variableDefinition.variable.name.value;
+    const value = substitutions.get(variableDefinition.variable.name.value);
+    if (value) {
+      return { ...acc, [key]: value }
+    }
+
+    if (variableDefinition.defaultValue) {
+      return { ...acc, [key]: variableDefinition.defaultValue };
+    }
+
+    return acc;
+  })
+
+  return fragmentArgumentSubstitutions(
     fragmentDefinitionVariables,
     fragmentSpread.arguments,
   );
-
-  return visit(def.selectionSet, {
-    Variable(node) {
-      return argumentValues.get(node.name.value);
-    },
-  });
 }
 
 export function fragmentArgumentSubstitutions(
