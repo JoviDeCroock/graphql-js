@@ -9,11 +9,13 @@ import type {
   InlineFragmentNode,
   OperationDefinitionNode,
   SelectionSetNode,
+  ValueNode,
 } from '../language/ast.js';
 import { OperationTypeNode } from '../language/ast.js';
 import { Kind } from '../language/kinds.js';
 
 import type { GraphQLObjectType } from '../type/definition.js';
+import { isInputType } from '../type/definition.js';
 import { isAbstractType } from '../type/definition.js';
 import {
   GraphQLDeferDirective,
@@ -23,6 +25,7 @@ import {
 import type { GraphQLSchema } from '../type/schema.js';
 
 import { typeFromAST } from '../utilities/typeFromAST.js';
+import { valueFromAST } from '../utilities/valueFromAST.js';
 import { valueFromASTUntyped } from '../utilities/valueFromASTUntyped.js';
 
 import { getDirectiveValues } from './values.js';
@@ -35,7 +38,7 @@ export interface DeferUsage {
 export interface FieldDetails {
   node: FieldNode;
   deferUsage: DeferUsage | undefined;
-  variableValues?: ObjMap<unknown>
+  fragmentVariableValues?: ObjMap<unknown> | undefined
 }
 
 interface CollectFieldsContext {
@@ -44,6 +47,7 @@ interface CollectFieldsContext {
   operation: OperationDefinitionNode;
   runtimeType: GraphQLObjectType;
   visitedFragmentNames: Set<string>;
+  variableValues: { [variable: string]: unknown },
 }
 
 /**
@@ -67,6 +71,7 @@ export function collectFields(
     schema,
     fragments,
     runtimeType,
+    variableValues,
     operation,
     visitedFragmentNames: new Set(),
   };
@@ -98,6 +103,7 @@ export function collectSubfields(
     schema,
     fragments,
     runtimeType: returnType,
+    variableValues,
     operation,
     visitedFragmentNames: new Set(),
   };
@@ -110,7 +116,7 @@ export function collectSubfields(
         context,
         node.selectionSet,
         subGroupedFieldSet,
-        variableValues,
+        undefined,
         fieldDetail.deferUsage,
       );
     }
@@ -124,7 +130,7 @@ function collectFieldsImpl(
   context: CollectFieldsContext,
   selectionSet: SelectionSetNode,
   groupedFieldSet: AccumulatorMap<string, FieldDetails>,
-  variableValues: ObjMap<unknown>,
+  fragmentVariableValues?: ObjMap<unknown>,
   parentDeferUsage?: DeferUsage,
   deferUsage?: DeferUsage,
 ): void {
@@ -132,6 +138,7 @@ function collectFieldsImpl(
     schema,
     fragments,
     runtimeType,
+    variableValues,
     operation,
     visitedFragmentNames,
   } = context;
@@ -139,13 +146,14 @@ function collectFieldsImpl(
   for (const selection of selectionSet.selections) {
     switch (selection.kind) {
       case Kind.FIELD: {
-        if (!shouldIncludeNode(variableValues, selection)) {
+        const vars = fragmentVariableValues ?? variableValues;
+        if (!shouldIncludeNode(vars, selection)) {
           continue;
         }
         groupedFieldSet.add(getFieldEntryKey(selection), {
           node: selection,
           deferUsage: deferUsage ?? parentDeferUsage,
-          variableValues
+          fragmentVariableValues: fragmentVariableValues ?? undefined,
         });
         break;
       }
@@ -168,7 +176,7 @@ function collectFieldsImpl(
           context,
           selection.selectionSet,
           groupedFieldSet,
-          variableValues,
+          fragmentVariableValues,
           parentDeferUsage,
           newDeferUsage ?? deferUsage,
         );
@@ -215,32 +223,27 @@ function collectFieldsImpl(
         // - when a value is passed in through the fragment-spread we need to copy over the key-value
         //   into our variable-values.
         if (fragment.variableDefinitions) {
-          const rawVariables = { ...variableValues };
+          const rawVariables: ObjMap<unknown> = {};
 
-          const substitutions = new Map<string, unknown>();
+          const argumentValueLookup = new Map<string, ValueNode>();
           if (selection.arguments) {
             for (const argument of selection.arguments) {
-              substitutions.set(argument.name.value, valueFromASTUntyped(argument.value, variableValues));
+              argumentValueLookup.set(argument.name.value, argument.value);
             }
           }
 
           for (const variableDefinition of fragment.variableDefinitions) {
             const variableName = variableDefinition.variable.name.value;
-            const value = substitutions.get(variableName);
-            if (value !== undefined) {
-              rawVariables[variableName] = value
-              continue;
-            }
-            //} else if (value === undefined && variableDefinition.type.kind !== Kind.NON_NULL_TYPE) {
-            //  rawVariables[variableName] = null;
-            //  continue;
-            //}
-        
-            const defaultValue = variableDefinition.defaultValue;
-            if (defaultValue) {
-              rawVariables[variableName] = valueFromASTUntyped(defaultValue, variableValues);
-            } else {
-              delete rawVariables[variableName];
+            const value = argumentValueLookup.get(variableName);
+            if (value) {
+              const varType = typeFromAST(context.schema, variableDefinition.type);
+              if (varType && isInputType(varType)) {
+                const argumentValue = valueFromAST(value, varType, { ...variableValues, ...fragmentVariableValues });
+                rawVariables[variableName] = argumentValue
+                continue;
+              }
+            } else if (variableDefinition.defaultValue) {
+              rawVariables[variableName] = valueFromASTUntyped(variableDefinition.defaultValue, { ...variableValues, ...fragmentVariableValues });
             }
           }
 
@@ -257,7 +260,7 @@ function collectFieldsImpl(
             context,
             fragment.selectionSet,
             groupedFieldSet,
-            variableValues,
+            undefined,
             parentDeferUsage,
             newDeferUsage ?? deferUsage,
           );

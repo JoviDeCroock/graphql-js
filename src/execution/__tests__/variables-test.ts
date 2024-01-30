@@ -104,6 +104,7 @@ function fieldWithInputArg(
     type: GraphQLString,
     args: { input: inputArg },
     resolve(_, args) {
+      console.log(args);
       if ('input' in args) {
         return inspect(args.input);
       }
@@ -1156,7 +1157,7 @@ describe('Execute: Handles inputs', () => {
     });
   });
 
-  describe.only('using fragment arguments', () => {
+  describe('using fragment arguments', () => {
     it('when there are no fragment arguments', () => {
       const result = executeQueryWithFragmentArguments(`
         query {
@@ -1246,6 +1247,10 @@ describe('Execute: Handles inputs', () => {
           fieldWithNullableStringInput(input: $value)
         }
       `);
+
+      // TODO: this seems wrong, our variable definition tells us that `value` is a required string
+      // however we pass in null and expect this to be stringified into the input argument of our field.
+      // in the spec this sais it should raise a field-error
       expect(result).to.deep.equal({
         data: {
           fieldWithNullableStringInput: 'null',
