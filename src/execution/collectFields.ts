@@ -1,6 +1,4 @@
-import { GraphQLError } from '../error/GraphQLError.js';
 import { AccumulatorMap } from '../jsutils/AccumulatorMap.js';
-import { inspect } from '../jsutils/inspect.js';
 import { invariant } from '../jsutils/invariant.js';
 import type { ObjMap } from '../jsutils/ObjMap.js';
 
@@ -11,13 +9,11 @@ import type {
   InlineFragmentNode,
   OperationDefinitionNode,
   SelectionSetNode,
-  ValueNode,
 } from '../language/ast.js';
 import { OperationTypeNode } from '../language/ast.js';
 import { Kind } from '../language/kinds.js';
 
 import type { GraphQLObjectType } from '../type/definition.js';
-import { isInputType } from '../type/definition.js';
 import { isAbstractType } from '../type/definition.js';
 import {
   GraphQLDeferDirective,
@@ -27,10 +23,8 @@ import {
 import type { GraphQLSchema } from '../type/schema.js';
 
 import { typeFromAST } from '../utilities/typeFromAST.js';
-import { valueFromAST } from '../utilities/valueFromAST.js';
-import { valueFromASTUntyped } from '../utilities/valueFromASTUntyped.js';
 
-import { getDirectiveValues } from './values.js';
+import { getDirectiveValues, getArgumentValuesFromSpread } from './values.js';
 
 export interface DeferUsage {
   label: string | undefined;
@@ -224,57 +218,23 @@ function collectFieldsImpl(
         //   scope as that variable can still get used in spreads later on in the selectionSet.
         // - when a value is passed in through the fragment-spread we need to copy over the key-value
         //   into our variable-values.
-        if (fragment.variableDefinitions) {
-          const rawVariables: ObjMap<unknown> = {};
+        const fragmentArgValues = fragment.variableDefinitions ? getArgumentValuesFromSpread(
+          selection,
+          schema,
+          fragment.variableDefinitions,
+          variableValues,
+          fragmentVariableValues,
+        ) : undefined;
 
-          const argumentValueLookup = new Map<string, ValueNode>();
-          if (selection.arguments) {
-            for (const argument of selection.arguments) {
-              argumentValueLookup.set(argument.name.value, argument.value);
-            }
-          }
+        collectFieldsImpl(
+          context,
+          fragment.selectionSet,
+          groupedFieldSet,
+          fragmentArgValues,
+          parentDeferUsage,
+          newDeferUsage ?? deferUsage,
+        );
 
-          for (const variableDefinition of fragment.variableDefinitions) {
-            const variableName = variableDefinition.variable.name.value;
-            const value = argumentValueLookup.get(variableName);
-            if (value) {
-              const varType = typeFromAST(context.schema, variableDefinition.type);
-              if (varType && isInputType(varType)) {
-                const argumentValue = valueFromAST(value, varType, { ...variableValues, ...fragmentVariableValues });
-                if (argumentValue !== undefined) {
-                  rawVariables[variableName] = argumentValue
-                  continue;
-                } else {
-                  throw new GraphQLError(
-                    `Argument "${variableName}" of required type "${inspect(varType)}" ` +
-                      'was not provided.',
-                    { nodes: selection },
-                  );
-                }
-              }
-            } else if (variableDefinition.defaultValue) {
-              rawVariables[variableName] = valueFromASTUntyped(variableDefinition.defaultValue, { ...variableValues, ...fragmentVariableValues });
-            }
-          }
-
-          collectFieldsImpl(
-            context,
-            fragment.selectionSet,
-            groupedFieldSet,
-            rawVariables,
-            parentDeferUsage,
-            newDeferUsage ?? deferUsage,
-          );
-        } else {
-          collectFieldsImpl(
-            context,
-            fragment.selectionSet,
-            groupedFieldSet,
-            undefined,
-            parentDeferUsage,
-            newDeferUsage ?? deferUsage,
-          );
-        }
         break;
       }
     }

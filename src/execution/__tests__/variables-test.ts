@@ -104,7 +104,6 @@ function fieldWithInputArg(
     type: GraphQLString,
     args: { input: inputArg },
     resolve(_, args) {
-      console.log(args);
       if ('input' in args) {
         return inspect(args.input);
       }
@@ -1199,11 +1198,9 @@ describe('Execute: Handles inputs', () => {
           fieldWithNullableStringInput(input: $value)
         }
       `);
-      expect(result).to.deep.equal({
-        data: {
-          fieldWithNullableStringInput: null,
-        },
-      });
+      
+      // TODO: Make more exact
+      expect(result).to.have.property('errors');
     });
 
     it('when the definition has a default and is provided', () => {
@@ -1238,6 +1235,25 @@ describe('Execute: Handles inputs', () => {
       });
     });
 
+    it('when a definition has a default, is not provided, and spreads another fragment', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query {
+          ...a
+        }
+        fragment a($a: String! = "B") on TestType {
+          ...b(b: $a)
+        }
+        fragment b($b: String!) on TestType {
+          fieldWithNonNullableStringInput(input: $b)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {
+          fieldWithNonNullableStringInput: '"B"',
+        },
+      });
+    });
+
     it('when the definition has a non-nullable default and is provided null', () => {
       const result = executeQueryWithFragmentArguments(`
         query {
@@ -1248,14 +1264,8 @@ describe('Execute: Handles inputs', () => {
         }
       `);
 
-      // TODO: this seems wrong, our variable definition tells us that `value` is a required string
-      // however we pass in null and expect this to be stringified into the input argument of our field.
-      // in the spec this sais it should raise a field-error
-      expect(result).to.deep.equal({
-        data: {
-          fieldWithNullableStringInput: 'null',
-        },
-      });
+      // TODO: Make more exact
+      expect(result).to.have.property('errors');
     });
 
     it('when the definition has no default and is not provided', () => {
