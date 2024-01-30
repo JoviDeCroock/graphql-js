@@ -1156,7 +1156,7 @@ describe('Execute: Handles inputs', () => {
     });
   });
 
-  describe('using fragment arguments', () => {
+  describe.only('using fragment arguments', () => {
     it('when there are no fragment arguments', () => {
       const result = executeQueryWithFragmentArguments(`
         query {

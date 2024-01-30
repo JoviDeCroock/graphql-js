@@ -626,7 +626,7 @@ function executeField(
     const args = getArgumentValues(
       fieldDef,
       fieldGroup.fields[0].node,
-      exeContext.variableValues,
+      fieldGroup.fields[0].variableValues ?? exeContext.variableValues,
     );
 
     // The resolve function's optional third argument is a context value that
@@ -927,7 +927,7 @@ function getStreamUsage(
   const stream = getDirectiveValues(
     GraphQLStreamDirective,
     fieldGroup.fields[0].node,
-    exeContext.variableValues,
+    fieldGroup.fields[0].variableValues ?? exeContext.variableValues,
   );
 
   if (!stream) {

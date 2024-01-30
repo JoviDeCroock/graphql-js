@@ -22,8 +22,8 @@ import {
 } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
-import { substituteFragmentArguments } from '../utilities/substituteFragmentArguments.js';
 import { typeFromAST } from '../utilities/typeFromAST.js';
+import { valueFromASTUntyped } from '../utilities/valueFromASTUntyped.js';
 
 import { getDirectiveValues } from './values.js';
 
@@ -35,12 +35,12 @@ export interface DeferUsage {
 export interface FieldDetails {
   node: FieldNode;
   deferUsage: DeferUsage | undefined;
+  variableValues?: ObjMap<unknown>
 }
 
 interface CollectFieldsContext {
   schema: GraphQLSchema;
   fragments: ObjMap<FragmentDefinitionNode>;
-  variableValues: { [variable: string]: unknown };
   operation: OperationDefinitionNode;
   runtimeType: GraphQLObjectType;
   visitedFragmentNames: Set<string>;
@@ -66,13 +66,12 @@ export function collectFields(
   const context: CollectFieldsContext = {
     schema,
     fragments,
-    variableValues,
     runtimeType,
     operation,
     visitedFragmentNames: new Set(),
   };
 
-  collectFieldsImpl(context, operation.selectionSet, groupedFieldSet);
+  collectFieldsImpl(context, operation.selectionSet, groupedFieldSet, variableValues);
   return groupedFieldSet;
 }
 
@@ -98,7 +97,6 @@ export function collectSubfields(
   const context: CollectFieldsContext = {
     schema,
     fragments,
-    variableValues,
     runtimeType: returnType,
     operation,
     visitedFragmentNames: new Set(),
@@ -112,6 +110,7 @@ export function collectSubfields(
         context,
         node.selectionSet,
         subGroupedFieldSet,
+        variableValues,
         fieldDetail.deferUsage,
       );
     }
@@ -120,17 +119,18 @@ export function collectSubfields(
   return subGroupedFieldSet;
 }
 
+// eslint-disable-next-line max-params
 function collectFieldsImpl(
   context: CollectFieldsContext,
   selectionSet: SelectionSetNode,
   groupedFieldSet: AccumulatorMap<string, FieldDetails>,
+  variableValues: ObjMap<unknown>,
   parentDeferUsage?: DeferUsage,
   deferUsage?: DeferUsage,
 ): void {
   const {
     schema,
     fragments,
-    variableValues,
     runtimeType,
     operation,
     visitedFragmentNames,
@@ -145,6 +145,7 @@ function collectFieldsImpl(
         groupedFieldSet.add(getFieldEntryKey(selection), {
           node: selection,
           deferUsage: deferUsage ?? parentDeferUsage,
+          variableValues
         });
         break;
       }
@@ -167,6 +168,7 @@ function collectFieldsImpl(
           context,
           selection.selectionSet,
           groupedFieldSet,
+          variableValues,
           parentDeferUsage,
           newDeferUsage ?? deferUsage,
         );
@@ -203,18 +205,63 @@ function collectFieldsImpl(
           visitedFragmentNames.add(fragmentName);
         }
 
-        const fragmentSelectionSet = substituteFragmentArguments(
-          fragment,
-          selection,
-        );
+        // We need to introduce a concept of shadowing:
+        //
+        // - when a fragment defines a variable that is in the parent scope but not given
+        //   in the fragment-spread we need to look at this variable as undefined and check
+        //   whether the definition has a defaultValue, if not remove it from the variableValues.
+        // - when a fragment does not define a variable we need to copy it over from the parent
+        //   scope as that variable can still get used in spreads later on in the selectionSet.
+        // - when a value is passed in through the fragment-spread we need to copy over the key-value
+        //   into our variable-values.
+        if (fragment.variableDefinitions) {
+          const rawVariables = { ...variableValues };
 
-        collectFieldsImpl(
-          context,
-          fragmentSelectionSet,
-          groupedFieldSet,
-          parentDeferUsage,
-          newDeferUsage ?? deferUsage,
-        );
+          const substitutions = new Map<string, unknown>();
+          if (selection.arguments) {
+            for (const argument of selection.arguments) {
+              substitutions.set(argument.name.value, valueFromASTUntyped(argument.value, variableValues));
+            }
+          }
+
+          for (const variableDefinition of fragment.variableDefinitions) {
+            const variableName = variableDefinition.variable.name.value;
+            const value = substitutions.get(variableName);
+            if (value !== undefined) {
+              rawVariables[variableName] = value
+              continue;
+            }
+            //} else if (value === undefined && variableDefinition.type.kind !== Kind.NON_NULL_TYPE) {
+            //  rawVariables[variableName] = null;
+            //  continue;
+            //}
+        
+            const defaultValue = variableDefinition.defaultValue;
+            if (defaultValue) {
+              rawVariables[variableName] = valueFromASTUntyped(defaultValue, variableValues);
+            } else {
+              delete rawVariables[variableName];
+            }
+          }
+
+          collectFieldsImpl(
+            context,
+            fragment.selectionSet,
+            groupedFieldSet,
+            rawVariables,
+            parentDeferUsage,
+            newDeferUsage ?? deferUsage,
+          );
+        } else {
+          collectFieldsImpl(
+            context,
+            fragment.selectionSet,
+            groupedFieldSet,
+            variableValues,
+            parentDeferUsage,
+            newDeferUsage ?? deferUsage,
+          );
+        }
         break;
       }
     }
