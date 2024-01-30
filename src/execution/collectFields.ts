@@ -1,4 +1,6 @@
+import { GraphQLError } from '../error/GraphQLError.js';
 import { AccumulatorMap } from '../jsutils/AccumulatorMap.js';
+import { inspect } from '../jsutils/inspect.js';
 import { invariant } from '../jsutils/invariant.js';
 import type { ObjMap } from '../jsutils/ObjMap.js';
 
@@ -239,8 +241,16 @@ function collectFieldsImpl(
               const varType = typeFromAST(context.schema, variableDefinition.type);
               if (varType && isInputType(varType)) {
                 const argumentValue = valueFromAST(value, varType, { ...variableValues, ...fragmentVariableValues });
-                rawVariables[variableName] = argumentValue
-                continue;
+                if (argumentValue !== undefined) {
+                  rawVariables[variableName] = argumentValue
+                  continue;
+                } else {
+                  throw new GraphQLError(
+                    `Argument "${variableName}" of required type "${inspect(varType)}" ` +
+                      'was not provided.',
+                    { nodes: selection },
+                  );
+                }
               }
             } else if (variableDefinition.defaultValue) {
               rawVariables[variableName] = valueFromASTUntyped(variableDefinition.defaultValue, { ...variableValues, ...fragmentVariableValues });
