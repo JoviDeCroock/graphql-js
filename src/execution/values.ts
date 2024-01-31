@@ -8,8 +8,8 @@ import { GraphQLError } from '../error/GraphQLError.js';
 import type {
   DirectiveNode,
   FieldNode,
-  VariableDefinitionNode,
   FragmentSpreadNode,
+  VariableDefinitionNode,
 } from '../language/ast.js';
 import { Kind } from '../language/kinds.js';
 import { print } from '../language/printer.js';
@@ -160,14 +160,16 @@ function coerceVariableValues(
  */
 export function getArgumentValues(
   node: FieldNode | DirectiveNode,
-  argDefs: readonly GraphQLArgument[] | undefined,
+  argDefs: ReadonlyArray<GraphQLArgument> | undefined,
   variableValues: Maybe<ObjMap<unknown>>,
   fragmentArgValues?: Maybe<ObjMap<unknown>>,
 ): { [argument: string]: unknown } {
   const coercedValues: { [argument: string]: unknown } = {};
-  const argNodeMap = new Map(node.arguments?.map((arg) => [arg.name.value, arg]));
+  const argNodeMap = new Map(
+    node.arguments?.map((arg) => [arg.name.value, arg]),
+  );
 
-  for (const argDef of (argDefs || [])) {
+  for (const argDef of argDefs ?? []) {
     const name = argDef.name;
     const argType = argDef.type;
     const argumentNode = argNodeMap.get(name);
@@ -250,15 +252,17 @@ export function getArgumentValuesFromSpread(
   /** NOTE: For error annotations only */
   node: FragmentSpreadNode,
   schema: GraphQLSchema,
-  fragmentVarDefs: readonly VariableDefinitionNode[],
+  fragmentVarDefs: ReadonlyArray<VariableDefinitionNode>,
   variableValues: Maybe<ObjMap<unknown>>,
   fragmentArgValues?: Maybe<ObjMap<unknown>>,
 ): { [argument: string]: unknown } {
   const coercedValues: { [argument: string]: unknown } = {};
-  const argNodeMap = new Map(node.arguments?.map((arg) => [arg.name.value, arg]));
+  const argNodeMap = new Map(
+    node.arguments?.map((arg) => [arg.name.value, arg]),
+  );
 
   for (const varDef of fragmentVarDefs) {
-    const name = varDef.variable.name.value
+    const name = varDef.variable.name.value;
     const argType = typeFromAST(schema, varDef.type);
     const argumentNode = argNodeMap.get(name);
 
@@ -320,14 +324,14 @@ export function getArgumentValuesFromSpread(
     }
 
     // TODO: Make this follow the spec more closely
-    let coercedValue = undefined;
+    let coercedValue;
     if (argType && isInputType(argType)) {
       coercedValue = valueFromAST(valueNode, argType, {
         ...variableValues,
         ...fragmentArgValues,
       });
     }
-    
+
     if (coercedValue === undefined) {
       // Note: ValuesOfCorrectTypeRule validation should catch this before
       // execution. This is a runtime check to ensure execution does not

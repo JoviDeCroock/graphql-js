@@ -627,7 +627,7 @@ function executeField(
       fieldGroup.fields[0].node,
       fieldDef.args,
       exeContext.variableValues,
-      fieldGroup.fields[0].fragmentVariableValues
+      fieldGroup.fields[0].fragmentVariableValues,
     );
 
     // The resolve function's optional third argument is a context value that
@@ -1847,7 +1847,12 @@ function executeSubscription(
 
     // Build a JS object of arguments from the field.arguments AST, using the
     // variables scope to fulfill any variable references.
-    const args = getArgumentValues(fieldNodes[0], fieldDef.args, variableValues, undefined);
+    const args = getArgumentValues(
+      fieldNodes[0],
+      fieldDef.args,
+      variableValues,
+      undefined,
+    );
 
     // The resolve function's optional third argument is a context value that
     // is provided to every resolve function within an execution. It is commonly

@@ -1198,7 +1198,7 @@ describe('Execute: Handles inputs', () => {
           fieldWithNullableStringInput(input: $value)
         }
       `);
-      
+
       // TODO: Make more exact
       expect(result).to.have.property('errors');
     });

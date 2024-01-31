@@ -24,7 +24,7 @@ import type { GraphQLSchema } from '../type/schema.js';
 
 import { typeFromAST } from '../utilities/typeFromAST.js';
 
-import { getDirectiveValues, getArgumentValuesFromSpread } from './values.js';
+import { getArgumentValuesFromSpread, getDirectiveValues } from './values.js';
 
 export interface DeferUsage {
   label: string | undefined;
@@ -34,7 +34,7 @@ export interface DeferUsage {
 export interface FieldDetails {
   node: FieldNode;
   deferUsage: DeferUsage | undefined;
-  fragmentVariableValues?: ObjMap<unknown> | undefined
+  fragmentVariableValues?: ObjMap<unknown> | undefined;
 }
 
 interface CollectFieldsContext {
@@ -43,7 +43,7 @@ interface CollectFieldsContext {
   operation: OperationDefinitionNode;
   runtimeType: GraphQLObjectType;
   visitedFragmentNames: Set<string>;
-  variableValues: { [variable: string]: unknown },
+  variableValues: { [variable: string]: unknown };
 }
 
 /**
@@ -72,7 +72,12 @@ export function collectFields(
     visitedFragmentNames: new Set(),
   };
 
-  collectFieldsImpl(context, operation.selectionSet, groupedFieldSet, variableValues);
+  collectFieldsImpl(
+    context,
+    operation.selectionSet,
+    groupedFieldSet,
+    variableValues,
+  );
   return groupedFieldSet;
 }
 
@@ -218,13 +223,15 @@ function collectFieldsImpl(
         //   scope as that variable can still get used in spreads later on in the selectionSet.
         // - when a value is passed in through the fragment-spread we need to copy over the key-value
         //   into our variable-values.
-        const fragmentArgValues = fragment.variableDefinitions ? getArgumentValuesFromSpread(
-          selection,
-          schema,
-          fragment.variableDefinitions,
-          variableValues,
-          fragmentVariableValues,
-        ) : undefined;
+        const fragmentArgValues = fragment.variableDefinitions
+          ? getArgumentValuesFromSpread(
+              selection,
+              schema,
+              fragment.variableDefinitions,
+              variableValues,
+              fragmentVariableValues,
+            )
+          : undefined;
 
         collectFieldsImpl(
           context,
