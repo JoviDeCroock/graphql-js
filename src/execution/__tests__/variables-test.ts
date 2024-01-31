@@ -1324,7 +1324,7 @@ describe('Execute: Handles inputs', () => {
       });
     });
 
-    it.only('when a fragment-variable is shadowed by an intermediate fragment-spread but defined in the operation-variables', () => {
+    it ('when a fragment-variable is shadowed by an intermediate fragment-spread but defined in the operation-variables', () => {
       const result = executeQueryWithFragmentArguments(`
         query($x: String = "A") {
           ...a
