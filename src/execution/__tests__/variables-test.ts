@@ -1199,8 +1199,11 @@ describe('Execute: Handles inputs', () => {
         }
       `);
 
-      // TODO: Make more exact
       expect(result).to.have.property('errors');
+      expect(result.errors).to.have.length(1);
+      expect(result.errors?.at(0)?.message).to.match(
+        /Argument "value" of required type "String!"/,
+      );
     });
 
     it('when the definition has a default and is provided', () => {
@@ -1264,8 +1267,11 @@ describe('Execute: Handles inputs', () => {
         }
       `);
 
-      // TODO: Make more exact
       expect(result).to.have.property('errors');
+      expect(result.errors).to.have.length(1);
+      expect(result.errors?.at(0)?.message).to.match(
+        /Argument "value" of non-null type "String!"/,
+      );
     });
 
     it('when the definition has no default and is not provided', () => {
