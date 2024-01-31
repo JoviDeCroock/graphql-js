@@ -1324,6 +1324,27 @@ describe('Execute: Handles inputs', () => {
       });
     });
 
+    it.only('when a fragment-variable is shadowed by an intermediate fragment-spread but defined in the operation-variables', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query($x: String = "A") {
+          ...a
+        }
+        fragment a($x: String) on TestType {
+          ...b
+        }
+
+        fragment b on TestType {
+          fieldWithNullableStringInput(input: $x)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {
+          fieldWithNullableStringInput:
+            '"A"',
+        },
+      });
+    });
+
     it('when a fragment is used with different args', () => {
       const result = executeQueryWithFragmentArguments(`
         query($x: String = "Hello") {
