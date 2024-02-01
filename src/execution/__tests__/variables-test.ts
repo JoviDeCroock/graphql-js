@@ -1198,11 +1198,12 @@ describe('Execute: Handles inputs', () => {
           fieldWithNullableStringInput(input: $value)
         }
       `);
-      expect(result).to.deep.equal({
-        data: {
-          fieldWithNullableStringInput: null,
-        },
-      });
+
+      expect(result).to.have.property('errors');
+      expect(result.errors).to.have.length(1);
+      expect(result.errors?.at(0)?.message).to.match(
+        /Argument "value" of required type "String!"/,
+      );
     });
 
     it('when the definition has a default and is provided', () => {
@@ -1237,6 +1238,25 @@ describe('Execute: Handles inputs', () => {
       });
     });
 
+    it('when a definition has a default, is not provided, and spreads another fragment', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query {
+          ...a
+        }
+        fragment a($a: String! = "B") on TestType {
+          ...b(b: $a)
+        }
+        fragment b($b: String!) on TestType {
+          fieldWithNonNullableStringInput(input: $b)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {
+          fieldWithNonNullableStringInput: '"B"',
+        },
+      });
+    });
+
     it('when the definition has a non-nullable default and is provided null', () => {
       const result = executeQueryWithFragmentArguments(`
         query {
@@ -1246,11 +1266,12 @@ describe('Execute: Handles inputs', () => {
           fieldWithNullableStringInput(input: $value)
         }
       `);
-      expect(result).to.deep.equal({
-        data: {
-          fieldWithNullableStringInput: 'null',
-        },
-      });
+
+      expect(result).to.have.property('errors');
+      expect(result.errors).to.have.length(1);
+      expect(result.errors?.at(0)?.message).to.match(
+        /Argument "value" of non-null type "String!"/,
+      );
     });
 
     it('when the definition has no default and is not provided', () => {
@@ -1299,6 +1320,27 @@ describe('Execute: Handles inputs', () => {
         data: {
           fieldWithNonNullableStringInputAndDefaultArgumentValue:
             '"Hello World"',
+        },
+      });
+    });
+
+    it ('when a fragment-variable is shadowed by an intermediate fragment-spread but defined in the operation-variables', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query($x: String = "A") {
+          ...a
+        }
+        fragment a($x: String) on TestType {
+          ...b
+        }
+
+        fragment b on TestType {
+          fieldWithNullableStringInput(input: $x)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {
+          fieldWithNullableStringInput:
+            '"A"',
         },
       });
     });

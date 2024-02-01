@@ -22,10 +22,9 @@ import {
 } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
-import { substituteFragmentArguments } from '../utilities/substituteFragmentArguments.js';
 import { typeFromAST } from '../utilities/typeFromAST.js';
 
-import { getDirectiveValues } from './values.js';
+import { getArgumentValuesFromSpread, getDirectiveValues } from './values.js';
 
 export interface DeferUsage {
   label: string | undefined;
@@ -35,15 +34,16 @@ export interface DeferUsage {
 export interface FieldDetails {
   node: FieldNode;
   deferUsage: DeferUsage | undefined;
+  fragmentVariableValues?: ObjMap<unknown> | undefined;
 }
 
 interface CollectFieldsContext {
   schema: GraphQLSchema;
   fragments: ObjMap<FragmentDefinitionNode>;
-  variableValues: { [variable: string]: unknown };
   operation: OperationDefinitionNode;
   runtimeType: GraphQLObjectType;
   visitedFragmentNames: Set<string>;
+  variableValues: { [variable: string]: unknown };
 }
 
 /**
@@ -66,13 +66,18 @@ export function collectFields(
   const context: CollectFieldsContext = {
     schema,
     fragments,
-    variableValues,
     runtimeType,
+    variableValues,
     operation,
     visitedFragmentNames: new Set(),
   };
 
-  collectFieldsImpl(context, operation.selectionSet, groupedFieldSet);
+  collectFieldsImpl(
+    context,
+    operation.selectionSet,
+    groupedFieldSet,
+    variableValues,
+  );
   return groupedFieldSet;
 }
 
@@ -98,8 +103,8 @@ export function collectSubfields(
   const context: CollectFieldsContext = {
     schema,
     fragments,
-    variableValues,
     runtimeType: returnType,
+    variableValues,
     operation,
     visitedFragmentNames: new Set(),
   };
@@ -112,6 +117,7 @@ export function collectSubfields(
         context,
         node.selectionSet,
         subGroupedFieldSet,
+        undefined,
         fieldDetail.deferUsage,
       );
     }
@@ -120,18 +126,20 @@ export function collectSubfields(
   return subGroupedFieldSet;
 }
 
+// eslint-disable-next-line max-params
 function collectFieldsImpl(
   context: CollectFieldsContext,
   selectionSet: SelectionSetNode,
   groupedFieldSet: AccumulatorMap<string, FieldDetails>,
+  fragmentVariableValues?: ObjMap<unknown>,
   parentDeferUsage?: DeferUsage,
   deferUsage?: DeferUsage,
 ): void {
   const {
     schema,
     fragments,
-    variableValues,
     runtimeType,
+    variableValues,
     operation,
     visitedFragmentNames,
   } = context;
@@ -139,12 +147,14 @@ function collectFieldsImpl(
   for (const selection of selectionSet.selections) {
     switch (selection.kind) {
       case Kind.FIELD: {
-        if (!shouldIncludeNode(variableValues, selection)) {
+        const vars = fragmentVariableValues ?? variableValues;
+        if (!shouldIncludeNode(vars, selection)) {
           continue;
         }
         groupedFieldSet.add(getFieldEntryKey(selection), {
           node: selection,
           deferUsage: deferUsage ?? parentDeferUsage,
+          fragmentVariableValues: fragmentVariableValues ?? undefined,
         });
         break;
       }
@@ -167,6 +177,7 @@ function collectFieldsImpl(
           context,
           selection.selectionSet,
           groupedFieldSet,
+          fragmentVariableValues,
           parentDeferUsage,
           newDeferUsage ?? deferUsage,
         );
@@ -203,18 +214,34 @@ function collectFieldsImpl(
           visitedFragmentNames.add(fragmentName);
         }
 
-        const fragmentSelectionSet = substituteFragmentArguments(
-          fragment,
-          selection,
-        );
+        // We need to introduce a concept of shadowing:
+        //
+        // - when a fragment defines a variable that is in the parent scope but not given
+        //   in the fragment-spread we need to look at this variable as undefined and check
+        //   whether the definition has a defaultValue, if not remove it from the variableValues.
+        // - when a fragment does not define a variable we need to copy it over from the parent
+        //   scope as that variable can still get used in spreads later on in the selectionSet.
+        // - when a value is passed in through the fragment-spread we need to copy over the key-value
+        //   into our variable-values.
+        const fragmentArgValues = fragment.variableDefinitions
+          ? getArgumentValuesFromSpread(
+              selection,
+              schema,
+              fragment.variableDefinitions,
+              variableValues,
+              fragmentVariableValues,
+            )
+          : undefined;
 
         collectFieldsImpl(
           context,
-          fragmentSelectionSet,
+          fragment.selectionSet,
           groupedFieldSet,
+          fragmentArgValues,
           parentDeferUsage,
           newDeferUsage ?? deferUsage,
         );
+
         break;
       }
     }
