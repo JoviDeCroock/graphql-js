@@ -43,6 +43,7 @@ interface CollectFieldsContext {
   operation: OperationDefinitionNode;
   runtimeType: GraphQLObjectType;
   visitedFragmentNames: Set<string>;
+  localVariableValues: { [variable: string]: unknown } | undefined;
   variableValues: { [variable: string]: unknown };
 }
 
@@ -69,6 +70,7 @@ export function collectFields(
     runtimeType,
     variableValues,
     operation,
+    localVariableValues: undefined,
     visitedFragmentNames: new Set(),
   };
 
@@ -76,7 +78,6 @@ export function collectFields(
     context,
     operation.selectionSet,
     groupedFieldSet,
-    variableValues,
   );
   return groupedFieldSet;
 }
@@ -104,6 +105,7 @@ export function collectSubfields(
     schema,
     fragments,
     runtimeType: returnType,
+    localVariableValues: undefined,
     variableValues,
     operation,
     visitedFragmentNames: new Set(),
@@ -117,7 +119,6 @@ export function collectSubfields(
         context,
         node.selectionSet,
         subGroupedFieldSet,
-        undefined,
         fieldDetail.deferUsage,
       );
     }
@@ -126,12 +127,10 @@ export function collectSubfields(
   return subGroupedFieldSet;
 }
 
-// eslint-disable-next-line max-params
 function collectFieldsImpl(
   context: CollectFieldsContext,
   selectionSet: SelectionSetNode,
   groupedFieldSet: AccumulatorMap<string, FieldDetails>,
-  fragmentVariableValues?: ObjMap<unknown>,
   parentDeferUsage?: DeferUsage,
   deferUsage?: DeferUsage,
 ): void {
@@ -140,6 +139,7 @@ function collectFieldsImpl(
     fragments,
     runtimeType,
     variableValues,
+    localVariableValues,
     operation,
     visitedFragmentNames,
   } = context;
@@ -147,14 +147,14 @@ function collectFieldsImpl(
   for (const selection of selectionSet.selections) {
     switch (selection.kind) {
       case Kind.FIELD: {
-        const vars = fragmentVariableValues ?? variableValues;
+        const vars = localVariableValues ?? variableValues;
         if (!shouldIncludeNode(vars, selection)) {
           continue;
         }
         groupedFieldSet.add(getFieldEntryKey(selection), {
           node: selection,
           deferUsage: deferUsage ?? parentDeferUsage,
-          fragmentVariableValues: fragmentVariableValues ?? undefined,
+          fragmentVariableValues: localVariableValues ?? undefined,
         });
         break;
       }
@@ -177,7 +177,6 @@ function collectFieldsImpl(
           context,
           selection.selectionSet,
           groupedFieldSet,
-          fragmentVariableValues,
           parentDeferUsage,
           newDeferUsage ?? deferUsage,
         );
@@ -223,13 +222,13 @@ function collectFieldsImpl(
         //   scope as that variable can still get used in spreads later on in the selectionSet.
         // - when a value is passed in through the fragment-spread we need to copy over the key-value
         //   into our variable-values.
-        const fragmentArgValues = fragment.variableDefinitions
+        context.localVariableValues = fragment.variableDefinitions
           ? getArgumentValuesFromSpread(
               selection,
               schema,
               fragment.variableDefinitions,
               variableValues,
-              fragmentVariableValues,
+              context.localVariableValues,
             )
           : undefined;
 
@@ -237,10 +236,10 @@ function collectFieldsImpl(
           context,
           fragment.selectionSet,
           groupedFieldSet,
-          fragmentArgValues,
           parentDeferUsage,
           newDeferUsage ?? deferUsage,
         );
+        context.localVariableValues = undefined;
 
         break;
       }
