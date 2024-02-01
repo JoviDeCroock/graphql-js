@@ -74,11 +74,7 @@ export function collectFields(
     visitedFragmentNames: new Set(),
   };
 
-  collectFieldsImpl(
-    context,
-    operation.selectionSet,
-    groupedFieldSet,
-  );
+  collectFieldsImpl(context, operation.selectionSet, groupedFieldSet);
   return groupedFieldSet;
 }
 

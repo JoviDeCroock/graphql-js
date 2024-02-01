@@ -160,7 +160,7 @@ function coerceVariableValues(
  */
 export function getArgumentValues(
   node: FieldNode | DirectiveNode,
-  argDefs: ReadonlyArray<GraphQLArgument> | undefined,
+  argDefs: ReadonlyArray<GraphQLArgument>,
   variableValues: Maybe<ObjMap<unknown>>,
   fragmentArgValues?: Maybe<ObjMap<unknown>>,
 ): { [argument: string]: unknown } {
@@ -169,7 +169,7 @@ export function getArgumentValues(
     node.arguments?.map((arg) => [arg.name.value, arg]),
   );
 
-  for (const argDef of argDefs ?? []) {
+  for (const argDef of argDefs) {
     const name = argDef.name;
     const argType = argDef.type;
     const argumentNode = argNodeMap.get(name);
@@ -291,27 +291,11 @@ export function getArgumentValuesFromSpread(
         Object.hasOwn(fragmentArgValues, variableName)
       ) {
         hasValue = fragmentArgValues[variableName] != null;
-        if (!hasValue && varDef.defaultValue !== undefined) {
-          coercedValues[name] = valueFromASTUntyped(varDef.defaultValue);
-          continue;
-        }
       } else if (
         variableValues != null &&
         Object.hasOwn(variableValues, variableName)
       ) {
         hasValue = variableValues[variableName] != null;
-      } else if (varDef.defaultValue !== undefined) {
-        coercedValues[name] = valueFromASTUntyped(varDef.defaultValue);
-        continue;
-      } else if (isNonNullType(argType)) {
-        throw new GraphQLError(
-          `Argument "${name}" of required type "${inspect(argType)}" ` +
-            `was provided the variable "$${variableName}" which was not provided a runtime value.`,
-          { nodes: valueNode },
-        );
-      } else {
-        coercedValues[name] = undefined;
-        hasValue = false;
       }
     }
 
@@ -332,15 +316,6 @@ export function getArgumentValuesFromSpread(
       });
     }
 
-    if (coercedValue === undefined) {
-      // Note: ValuesOfCorrectTypeRule validation should catch this before
-      // execution. This is a runtime check to ensure execution does not
-      // continue with an invalid argument value.
-      throw new GraphQLError(
-        `Argument "${name}" has invalid value ${print(valueNode)}.`,
-        { nodes: valueNode },
-      );
-    }
     coercedValues[name] = coercedValue;
   }
   return coercedValues;
