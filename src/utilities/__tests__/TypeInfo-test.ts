@@ -523,7 +523,6 @@ describe('visitWithTypeInfo', () => {
       `
         query {
           ...Foo(x: 4)
-          ...Bar
         }
         fragment Foo(
           $x: ID!
@@ -629,7 +628,7 @@ describe('visitWithTypeInfo', () => {
     const ast = parse(
       `
           query {
-            ...Foo
+            ...Foo(x: null)
           }
           fragment Foo(
             $x: ID = 4
@@ -676,6 +675,12 @@ describe('visitWithTypeInfo', () => {
       ['enter', 'FragmentSpread', null, 'QueryRoot', 'undefined'],
       ['enter', 'Name', 'Foo', 'QueryRoot', 'undefined'],
       ['leave', 'Name', 'Foo', 'QueryRoot', 'undefined'],
+      ['enter', 'Argument', null, 'QueryRoot', 'ID'],
+      ['enter', 'Name', 'x', 'QueryRoot', 'ID'],
+      ['leave', 'Name', 'x', 'QueryRoot', 'ID'],
+      ['enter', 'NullValue', null, 'QueryRoot', 'ID'],
+      ['leave', 'NullValue', null, 'QueryRoot', 'ID'],
+      ['leave', 'Argument', null, 'QueryRoot', 'ID'],
       ['leave', 'FragmentSpread', null, 'QueryRoot', 'undefined'],
       ['leave', 'SelectionSet', null, 'QueryRoot', 'undefined'],
       ['leave', 'OperationDefinition', null, 'QueryRoot', 'undefined'],
