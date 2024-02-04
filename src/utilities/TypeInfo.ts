@@ -1,6 +1,11 @@
 import type { Maybe } from '../jsutils/Maybe.js';
 
-import type { ASTNode, FieldNode } from '../language/ast.js';
+import type {
+  ASTNode,
+  FieldNode,
+  FragmentDefinitionNode,
+  FragmentSpreadNode,
+} from '../language/ast.js';
 import { isNode } from '../language/ast.js';
 import { Kind } from '../language/kinds.js';
 import type { ASTVisitor } from '../language/visitor.js';
@@ -31,6 +36,7 @@ import type { GraphQLDirective } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
 import { typeFromAST } from './typeFromAST.js';
+import { valueFromAST } from './valueFromAST.js';
 
 /**
  * TypeInfo is a utility class which, given a GraphQL schema, can keep track
@@ -47,6 +53,8 @@ export class TypeInfo {
   private _directive: Maybe<GraphQLDirective>;
   private _argument: Maybe<GraphQLArgument>;
   private _enumValue: Maybe<GraphQLEnumValue>;
+  private _fragmentSpread: Maybe<FragmentSpreadNode>;
+  private _fragmentDefinitions: Map<string, FragmentDefinitionNode>;
   private _getFieldDef: GetFieldDefFn;
 
   constructor(
@@ -69,6 +77,8 @@ export class TypeInfo {
     this._directive = null;
     this._argument = null;
     this._enumValue = null;
+    this._fragmentSpread = null;
+    this._fragmentDefinitions = new Map();
     this._getFieldDef = getFieldDefFn ?? getFieldDef;
     if (initialType) {
       if (isInputType(initialType)) {
@@ -130,6 +140,17 @@ export class TypeInfo {
     // checked before continuing since TypeInfo is used as part of validation
     // which occurs before guarantees of schema and document validity.
     switch (node.kind) {
+      case Kind.DOCUMENT: {
+        // A document's fragment definitions are type signatures
+        // referenced via fragment spreads. Ensure we can use definitions
+        // before visiting their call sites.
+        for (const astNode of node.definitions) {
+          if (astNode.kind === Kind.FRAGMENT_DEFINITION) {
+            this._fragmentDefinitions.set(astNode.name.value, astNode);
+          }
+        }
+        break;
+      }
       case Kind.SELECTION_SET: {
         const namedType: unknown = getNamedType(this.getType());
         this._parentTypeStack.push(
@@ -159,6 +180,10 @@ export class TypeInfo {
         this._typeStack.push(isObjectType(rootType) ? rootType : undefined);
         break;
       }
+      case Kind.FRAGMENT_SPREAD: {
+        this._fragmentSpread = node;
+        break;
+      }
       case Kind.INLINE_FRAGMENT:
       case Kind.FRAGMENT_DEFINITION: {
         const typeConditionAST = node.typeCondition;
@@ -178,15 +203,51 @@ export class TypeInfo {
       case Kind.ARGUMENT: {
         let argDef;
         let argType: unknown;
-        const fieldOrDirective = this.getDirective() ?? this.getFieldDef();
-        if (fieldOrDirective) {
-          argDef = fieldOrDirective.args.find(
-            (arg) => arg.name === node.name.value,
+        const directive = this.getDirective();
+        const fragmentSpread = this._fragmentSpread;
+        const fieldDef = this.getFieldDef();
+        if (directive) {
+          argDef = directive.args.find((arg) => arg.name === node.name.value);
+        } else if (fragmentSpread) {
+          const fragmentDef = this._fragmentDefinitions.get(
+            fragmentSpread.name.value,
           );
-          if (argDef) {
-            argType = argDef.type;
+          const fragVarDef = fragmentDef?.variableDefinitions?.find(
+            (varDef) => varDef.variable.name.value === node.name.value,
+          );
+          if (fragVarDef) {
+            const fragVarType = typeFromAST(schema, fragVarDef.type);
+            if (isInputType(fragVarType)) {
+              const fragVarDefault = fragVarDef.defaultValue
+                ? valueFromAST(fragVarDef.defaultValue, fragVarType)
+                : undefined;
+
+              // Minor hack: transform the FragmentArgDef
+              // into a schema Argument definition, to
+              // enable visiting identically to field/directive args
+              const schemaArgDef: GraphQLArgument = {
+                name: fragVarDef.variable.name.value,
+                type: fragVarType,
+                defaultValue: fragVarDefault,
+                description: undefined,
+                deprecationReason: undefined,
+                extensions: {},
+                astNode: {
+                  ...fragVarDef,
+                  kind: Kind.INPUT_VALUE_DEFINITION,
+                  name: fragVarDef.variable.name,
+                },
+              };
+              argDef = schemaArgDef;
+            }
           }
+        } else if (fieldDef) {
+          argDef = fieldDef.args.find((arg) => arg.name === node.name.value);
         }
+        if (argDef) {
+          argType = argDef.type;
+        }
+
         this._argument = argDef;
         this._defaultValueStack.push(argDef ? argDef.defaultValue : undefined);
         this._inputTypeStack.push(isInputType(argType) ? argType : undefined);
@@ -236,6 +297,9 @@ export class TypeInfo {
 
   leave(node: ASTNode) {
     switch (node.kind) {
+      case Kind.DOCUMENT:
+        this._fragmentDefinitions = new Map();
+        break;
       case Kind.SELECTION_SET:
         this._parentTypeStack.pop();
         break;
@@ -245,6 +309,9 @@ export class TypeInfo {
         break;
       case Kind.DIRECTIVE:
         this._directive = null;
+        break;
+      case Kind.FRAGMENT_SPREAD:
+        this._fragmentSpread = null;
         break;
       case Kind.OPERATION_DEFINITION:
       case Kind.INLINE_FRAGMENT:
