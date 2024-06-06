@@ -2,7 +2,10 @@ import { inspect } from '../../jsutils/inspect.js';
 
 import { GraphQLError } from '../../error/GraphQLError.js';
 
-import type { InputValueDefinitionNode, VariableDefinitionNode } from '../../language/ast.js';
+import type {
+  InputValueDefinitionNode,
+  VariableDefinitionNode,
+} from '../../language/ast.js';
 import { Kind } from '../../language/kinds.js';
 import { print } from '../../language/printer.js';
 import type { ASTVisitor } from '../../language/visitor.js';
@@ -158,6 +161,8 @@ export function ProvidedRequiredArgumentsOnDirectivesRule(
   };
 }
 
-function isRequiredArgumentNode(arg: InputValueDefinitionNode | VariableDefinitionNode): boolean {
+function isRequiredArgumentNode(
+  arg: InputValueDefinitionNode | VariableDefinitionNode,
+): boolean {
   return arg.type.kind === Kind.NON_NULL_TYPE && arg.defaultValue == null;
 }

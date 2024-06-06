@@ -204,8 +204,8 @@ export class ValidationContext extends ASTValidationContext {
       const typeInfo = new TypeInfo(this._schema);
       const fragmentVariableDefinitions =
         node.kind === Kind.FRAGMENT_DEFINITION
-        ? node.variableDefinitions
-        : undefined;
+          ? node.variableDefinitions
+          : undefined;
       visit(
         node,
         visitWithTypeInfo(typeInfo, {
@@ -218,7 +218,7 @@ export class ValidationContext extends ASTValidationContext {
               node: variable,
               type: typeInfo.getInputType(),
               defaultValue: typeInfo.getDefaultValue(),
-              fragmentVarDef
+              fragmentVarDef,
             });
           },
         }),
