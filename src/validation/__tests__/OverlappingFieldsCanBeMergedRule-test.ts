@@ -1264,4 +1264,137 @@ describe('Validate: Overlapping fields can be merged', () => {
       },
     ]);
   });
+
+  describe('fragment arguments must produce fields that can be merged', () => {
+    it('allows conflicting spreads at different depths', () => {
+      expectValid(`
+        query ValidDifferingFragmentArgs($command1: DogCommand, $command2: DogCommand) {
+          dog {
+            ...DoesKnowCommand(command: $command1)
+            mother {
+              ...DoesKnowCommand(command: $command2)
+            }
+          }
+        }
+        fragment DoesKnowCommand($command: DogCommand) on Dog {
+          doesKnowCommand(dogCommand: $command)
+        }
+      `);
+    });
+
+    it('encounters conflict in fragments', () => {
+      expectErrors(`
+        {
+          ...WithArgs(x: 3)
+          ...WithArgs(x: 4)
+        }
+        fragment WithArgs($x: Int) on Type {
+          a(x: $x)
+        }
+      `).toDeepEqual([
+        {
+          message:
+            'Spreads "WithArgs" conflict because WithArgs(x: 3) and WithArgs(x: 4) have different fragment arguments.',
+          locations: [
+            { line: 3, column: 11 },
+            { line: 4, column: 11 },
+          ],
+        },
+      ]);
+    });
+
+    // Proposed by Benjie
+    // these don't really need to conflict but they do
+    // we could pre-parse the query or get knowledge that
+    // $x is equal to $y here.
+    it('encounters conflict in fragment/field', () => {
+      expectErrors(`
+        query ($y: Int = 1) {
+          a(x: $y)
+          ...WithArgs(x: $y)
+        }
+        fragment WithArgs($x: Int) on Type {
+          a(x: $x)
+        }
+      `).toDeepEqual([
+        {
+          message:
+            'Fields "a" conflict because they have differing arguments. Use different aliases on the fields to fetch both if this was intentional.',
+          locations: [
+            { line: 3, column: 11 },
+            { line: 7, column: 11 },
+          ],
+        },
+      ]);
+    });
+
+    // This is currently not validated, should we?
+    it.skip('encounters nested field conflict in fragments that could otherwise merge', () => {
+      expectErrors(`
+        query ValidDifferingFragmentArgs($command1: DogCommand, $command2: DogCommand) {
+          dog {
+            ...DoesKnowCommandNested(command: $command1)
+            mother {
+              ...DoesKnowCommandNested(command: $command2)
+            }
+          }
+        }
+        fragment DoesKnowCommandNested($command: DogCommand) on Dog {
+          doesKnowCommand(dogCommand: $command)
+          mother {
+            doesKnowCommand(dogCommand: $command)
+          }
+        }
+      `).toDeepEqual([
+        {
+          message:
+            'Fields "mother" conflict because subfields "doesKnowCommand" conflict because they have differing arguments. Use different aliases on the fields to fetch both if this was intentional.',
+          locations: [
+            { line: 5, column: 13 },
+            { line: 14, column: 13 },
+            { line: 13, column: 11 },
+            { line: 12, column: 11 },
+          ],
+        },
+      ]);
+    });
+
+    it('encounters nested conflict in fragments', () => {
+      expectErrors(`
+        {
+          connection {
+            edges {
+              ...WithArgs(x: 3)
+            }
+          }
+          ...Connection
+        }
+        fragment Connection on Type {
+          connection {
+            edges {
+              ...WithArgs(x: 4)
+            }
+          }
+        }
+        fragment WithArgs($x: Int) on Type {
+          a(x: $x)
+        }
+      `).toDeepEqual([
+        {
+          message:
+            'Spreads "WithArgs" conflict because WithArgs(x: 3) and WithArgs(x: 4) have different fragment arguments.',
+          locations: [
+            {
+              column: 15,
+              line: 5,
+            },
+            {
+              column: 15,
+              line: 13,
+            },
+          ],
+        },
+      ]);
+    });
+  });
 });
