@@ -7,6 +7,7 @@ import type {
   DirectiveNode,
   FieldNode,
   FragmentDefinitionNode,
+  FragmentSpreadNode,
   SelectionSetNode,
   ValueNode,
 } from '../../language/ast.js';
@@ -70,13 +71,13 @@ export function OverlappingFieldsCanBeMergedRule(
   // A cache for the "field map" and list of fragment names found in any given
   // selection set. Selection sets may be asked for this information multiple
   // times, so this improves the performance of this validator.
-  const cachedFieldsAndFragmentNames = new Map();
+  const cachedFieldsAndFragmentSpreads = new Map();
 
   return {
     SelectionSet(selectionSet) {
       const conflicts = findConflictsWithinSelectionSet(
         context,
-        cachedFieldsAndFragmentNames,
+        cachedFieldsAndFragmentSpreads,
         comparedFragmentPairs,
         context.getParentType(),
         selectionSet,
@@ -107,8 +108,11 @@ type NodeAndDef = [
 ];
 // Map of array of those.
 type NodeAndDefCollection = Map<string, Array<NodeAndDef>>;
-type FragmentNames = ReadonlyArray<string>;
-type FieldsAndFragmentNames = readonly [NodeAndDefCollection, FragmentNames];
+type FragmentSpreadsByName = Map<string, Array<FragmentSpreadNode>>;
+type FieldsAndFragmentSpreads = readonly [
+  NodeAndDefCollection,
+  FragmentSpreadsByName,
+];
 
 /**
  * Algorithm:
@@ -165,26 +169,37 @@ type FieldsAndFragmentNames = readonly [NodeAndDefCollection, FragmentNames];
  *
  */
 
+const printFragmentSpreadArguments = (fragmentSpread: FragmentSpreadNode) => {
+  if (!fragmentSpread.arguments || fragmentSpread.arguments.length === 0) {
+    return fragmentSpread.name.value;
+  }
+
+  const printedArguments: Array<string> = fragmentSpread.arguments
+    .map(print)
+    .sort((a, b) => a.localeCompare(b));
+  return fragmentSpread.name.value + '(' + printedArguments.join(',') + ')';
+};
+
 // Find all conflicts found "within" a selection set, including those found
 // via spreading in fragments. Called when visiting each SelectionSet in the
 // GraphQL Document.
 function findConflictsWithinSelectionSet(
   context: ValidationContext,
-  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentNames>,
+  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   comparedFragmentPairs: PairSet,
   parentType: Maybe<GraphQLNamedType>,
   selectionSet: SelectionSetNode,
 ): Array<Conflict> {
   const conflicts: Array<Conflict> = [];
 
-  const [fieldMap, fragmentNames] = getFieldsAndFragmentNames(
+  const [fieldMap, fragmentSpreadMap] = getFieldsAndFragmentSpreads(
     context,
     cachedFieldsAndFragmentNames,
     parentType,
     selectionSet,
   );
 
-  // (A) Find find all conflicts "within" the fields of this selection set.
+  // (A) First find all conflicts "within" the fields and fragment-spreads of this selection set.
   // Note: this is the *only place* `collectConflictsWithin` is called.
   collectConflictsWithin(
     context,
@@ -194,34 +209,38 @@ function findConflictsWithinSelectionSet(
     fieldMap,
   );
 
-  if (fragmentNames.length !== 0) {
-    // (B) Then collect conflicts between these fields and those represented by
-    // each spread fragment name found.
-    for (let i = 0; i < fragmentNames.length; i++) {
-      collectConflictsBetweenFieldsAndFragment(
+  const allFragmentSpreads = [];
+  for (const [, fragmentSpreads] of fragmentSpreadMap.entries()) {
+    allFragmentSpreads.push(...fragmentSpreads);
+  }
+
+  // (B) Then collect conflicts between these fields and those represented by
+  // each spread fragment name found.
+  for (let i = 0; i < allFragmentSpreads.length; i++) {
+    collectConflictsBetweenFieldsAndFragment(
+      context,
+      conflicts,
+      cachedFieldsAndFragmentNames,
+      comparedFragmentPairs,
+      false,
+      fieldMap,
+      allFragmentSpreads[i],
+    );
+
+    // (C) Then compare this fragment with all other fragments found in this
+    // selection set to collect conflicts between fragments spread together.
+    // This compares each item in the list of fragment names to every other
+    // item in that same list (except for itself).
+    for (let j = i + 1; j < allFragmentSpreads.length; j++) {
+      collectConflictsBetweenFragments(
         context,
         conflicts,
         cachedFieldsAndFragmentNames,
         comparedFragmentPairs,
         false,
-        fieldMap,
-        fragmentNames[i],
+        allFragmentSpreads[i],
+        allFragmentSpreads[j],
       );
-      // (C) Then compare this fragment with all other fragments found in this
-      // selection set to collect conflicts between fragments spread together.
-      // This compares each item in the list of fragment names to every other
-      // item in that same list (except for itself).
-      for (let j = i + 1; j < fragmentNames.length; j++) {
-        collectConflictsBetweenFragments(
-          context,
-          conflicts,
-          cachedFieldsAndFragmentNames,
-          comparedFragmentPairs,
-          false,
-          fragmentNames[i],
-          fragmentNames[j],
-        );
-      }
     }
   }
   return conflicts;
@@ -232,12 +251,13 @@ function findConflictsWithinSelectionSet(
 function collectConflictsBetweenFieldsAndFragment(
   context: ValidationContext,
   conflicts: Array<Conflict>,
-  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentNames>,
+  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   comparedFragmentPairs: PairSet,
   areMutuallyExclusive: boolean,
   fieldMap: NodeAndDefCollection,
-  fragmentName: string,
+  fragmentSpread: FragmentSpreadNode,
 ): void {
+  const fragmentName = fragmentSpread.name.value;
   const fragment = context.getFragment(fragmentName);
   if (!fragment) {
     return;
@@ -269,7 +289,10 @@ function collectConflictsBetweenFieldsAndFragment(
 
   // (E) Then collect any conflicts between the provided collection of fields
   // and any fragment names found in the given fragment.
-  for (const referencedFragmentName of referencedFragmentNames) {
+  for (const [
+    referencedFragmentName,
+    [spread],
+  ] of referencedFragmentNames.entries()) {
     // Memoize so two fragments are not compared for conflicts more than once.
     if (
       comparedFragmentPairs.has(
@@ -293,7 +316,7 @@ function collectConflictsBetweenFieldsAndFragment(
       comparedFragmentPairs,
       areMutuallyExclusive,
       fieldMap,
-      referencedFragmentName,
+      spread,
     );
   }
 }
@@ -303,13 +326,31 @@ function collectConflictsBetweenFieldsAndFragment(
 function collectConflictsBetweenFragments(
   context: ValidationContext,
   conflicts: Array<Conflict>,
-  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentNames>,
+  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   comparedFragmentPairs: PairSet,
   areMutuallyExclusive: boolean,
-  fragmentName1: string,
-  fragmentName2: string,
+  fragmentSpread1: FragmentSpreadNode,
+  fragmentSpread2: FragmentSpreadNode,
 ): void {
+  const fragmentName1 = fragmentSpread1.name.value;
+  const fragmentName2 = fragmentSpread2.name.value;
   // No need to compare a fragment to itself.
+  if (
+    fragmentName1 === fragmentName2 &&
+    !sameArguments(fragmentSpread1, fragmentSpread2)
+  ) {
+    context.reportError(
+      new GraphQLError(
+        `Spreads "${fragmentName1}" conflict because ${printFragmentSpreadArguments(
+          fragmentSpread1,
+        )} and ${printFragmentSpreadArguments(
+          fragmentSpread2,
+        )} have different fragment arguments.`,
+        { nodes: [fragmentSpread1, fragmentSpread2] },
+      ),
+    );
+  }
+
   if (fragmentName1 === fragmentName2) {
     return;
   }
@@ -359,21 +400,21 @@ function collectConflictsBetweenFragments(
 
   // (G) Then collect conflicts between the first fragment and any nested
   // fragments spread in the second fragment.
-  for (const referencedFragmentName2 of referencedFragmentNames2) {
+  for (const [referencedFragmentSpread2] of referencedFragmentNames2.values()) {
     collectConflictsBetweenFragments(
       context,
       conflicts,
       cachedFieldsAndFragmentNames,
       comparedFragmentPairs,
       areMutuallyExclusive,
-      fragmentName1,
-      referencedFragmentName2,
+      fragmentSpread1,
+      referencedFragmentSpread2,
     );
   }
 
   // (G) Then collect conflicts between the second fragment and any nested
   // fragments spread in the first fragment.
-  for (const referencedFragmentName1 of referencedFragmentNames1) {
+  for (const [referencedFragmentName1] of referencedFragmentNames1.values()) {
     collectConflictsBetweenFragments(
       context,
       conflicts,
@@ -381,7 +422,7 @@ function collectConflictsBetweenFragments(
       comparedFragmentPairs,
       areMutuallyExclusive,
       referencedFragmentName1,
-      fragmentName2,
+      fragmentSpread2,
     );
   }
 }
@@ -391,7 +432,7 @@ function collectConflictsBetweenFragments(
 // between the sub-fields of two overlapping fields.
 function findConflictsBetweenSubSelectionSets(
   context: ValidationContext,
-  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentNames>,
+  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   comparedFragmentPairs: PairSet,
   areMutuallyExclusive: boolean,
   parentType1: Maybe<GraphQLNamedType>,
@@ -401,13 +442,13 @@ function findConflictsBetweenSubSelectionSets(
 ): Array<Conflict> {
   const conflicts: Array<Conflict> = [];
 
-  const [fieldMap1, fragmentNames1] = getFieldsAndFragmentNames(
+  const [fieldMap1, fragmentSpreadsByName1] = getFieldsAndFragmentSpreads(
     context,
     cachedFieldsAndFragmentNames,
     parentType1,
     selectionSet1,
   );
-  const [fieldMap2, fragmentNames2] = getFieldsAndFragmentNames(
+  const [fieldMap2, fragmentSpreadsByName2] = getFieldsAndFragmentSpreads(
     context,
     cachedFieldsAndFragmentNames,
     parentType2,
@@ -427,7 +468,7 @@ function findConflictsBetweenSubSelectionSets(
 
   // (I) Then collect conflicts between the first collection of fields and
   // those referenced by each fragment name associated with the second.
-  for (const fragmentName2 of fragmentNames2) {
+  for (const [fragmentSpread2] of fragmentSpreadsByName2.values()) {
     collectConflictsBetweenFieldsAndFragment(
       context,
       conflicts,
@@ -435,13 +476,13 @@ function findConflictsBetweenSubSelectionSets(
       comparedFragmentPairs,
       areMutuallyExclusive,
       fieldMap1,
-      fragmentName2,
+      fragmentSpread2,
     );
   }
 
   // (I) Then collect conflicts between the second collection of fields and
   // those referenced by each fragment name associated with the first.
-  for (const fragmentName1 of fragmentNames1) {
+  for (const [fragmentSpread1] of fragmentSpreadsByName1.values()) {
     collectConflictsBetweenFieldsAndFragment(
       context,
       conflicts,
@@ -449,15 +490,15 @@ function findConflictsBetweenSubSelectionSets(
       comparedFragmentPairs,
       areMutuallyExclusive,
       fieldMap2,
-      fragmentName1,
+      fragmentSpread1,
     );
   }
 
   // (J) Also collect conflicts between any fragment names by the first and
   // fragment names by the second. This compares each item in the first set of
   // names to each item in the second set of names.
-  for (const fragmentName1 of fragmentNames1) {
-    for (const fragmentName2 of fragmentNames2) {
+  for (const [fragmentName1] of fragmentSpreadsByName1.values()) {
+    for (const [fragmentName2] of fragmentSpreadsByName2.values()) {
       collectConflictsBetweenFragments(
         context,
         conflicts,
@@ -476,7 +517,7 @@ function findConflictsBetweenSubSelectionSets(
 function collectConflictsWithin(
   context: ValidationContext,
   conflicts: Array<Conflict>,
-  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentNames>,
+  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   comparedFragmentPairs: PairSet,
   fieldMap: NodeAndDefCollection,
 ): void {
@@ -517,7 +558,7 @@ function collectConflictsWithin(
 function collectConflictsBetween(
   context: ValidationContext,
   conflicts: Array<Conflict>,
-  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentNames>,
+  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   comparedFragmentPairs: PairSet,
   parentFieldsAreMutuallyExclusive: boolean,
   fieldMap1: NodeAndDefCollection,
@@ -555,7 +596,7 @@ function collectConflictsBetween(
 // comparing their sub-fields.
 function findConflict(
   context: ValidationContext,
-  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentNames>,
+  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   comparedFragmentPairs: PairSet,
   parentFieldsAreMutuallyExclusive: boolean,
   responseName: string,
@@ -650,8 +691,8 @@ function findConflict(
 }
 
 function sameArguments(
-  node1: FieldNode | DirectiveNode,
-  node2: FieldNode | DirectiveNode,
+  node1: FieldNode | DirectiveNode | FragmentSpreadNode,
+  node2: FieldNode | DirectiveNode | FragmentSpreadNode,
 ): boolean {
   const args1 = node1.arguments;
   const args2 = node2.arguments;
@@ -738,26 +779,26 @@ function doTypesConflict(
 // Given a selection set, return the collection of fields (a mapping of response
 // name to field nodes and definitions) as well as a list of fragment names
 // referenced via fragment spreads.
-function getFieldsAndFragmentNames(
+function getFieldsAndFragmentSpreads(
   context: ValidationContext,
-  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentNames>,
+  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   parentType: Maybe<GraphQLNamedType>,
   selectionSet: SelectionSetNode,
-): FieldsAndFragmentNames {
+): FieldsAndFragmentSpreads {
   const cached = cachedFieldsAndFragmentNames.get(selectionSet);
   if (cached) {
     return cached;
   }
   const nodeAndDefs: NodeAndDefCollection = new Map();
-  const fragmentNames = new Set<string>();
+  const fragmentSpreadsByName = new Map<string, Array<FragmentSpreadNode>>();
   _collectFieldsAndFragmentNames(
     context,
     parentType,
     selectionSet,
     nodeAndDefs,
-    fragmentNames,
+    fragmentSpreadsByName,
   );
-  const result = [nodeAndDefs, [...fragmentNames]] as const;
+  const result = [nodeAndDefs, fragmentSpreadsByName] as const;
   cachedFieldsAndFragmentNames.set(selectionSet, result);
   return result;
 }
@@ -766,7 +807,7 @@ function getFieldsAndFragmentNames(
 // as well as a list of nested fragment names referenced via fragment spreads.
 function getReferencedFieldsAndFragmentNames(
   context: ValidationContext,
-  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentNames>,
+  cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   fragment: FragmentDefinitionNode,
 ) {
   // Short-circuit building a type from the node if possible.
@@ -776,7 +817,7 @@ function getReferencedFieldsAndFragmentNames(
   }
 
   const fragmentType = typeFromAST(context.getSchema(), fragment.typeCondition);
-  return getFieldsAndFragmentNames(
+  return getFieldsAndFragmentSpreads(
     context,
     cachedFieldsAndFragmentNames,
     fragmentType,
@@ -789,7 +830,7 @@ function _collectFieldsAndFragmentNames(
   parentType: Maybe<GraphQLNamedType>,
   selectionSet: SelectionSetNode,
   nodeAndDefs: NodeAndDefCollection,
-  fragmentNames: Set<string>,
+  fragmentSpreadsByname: Map<string, Array<FragmentSpreadNode>>,
 ): void {
   for (const selection of selectionSet.selections) {
     switch (selection.kind) {
@@ -811,9 +852,15 @@ function _collectFieldsAndFragmentNames(
         nodeAndDefsList.push([parentType, selection, fieldDef]);
         break;
       }
-      case Kind.FRAGMENT_SPREAD:
-        fragmentNames.add(selection.name.value);
+      case Kind.FRAGMENT_SPREAD: {
+        const existing = fragmentSpreadsByname.get(selection.name.value);
+        if (existing) {
+          existing.push(selection);
+        } else {
+          fragmentSpreadsByname.set(selection.name.value, [selection]);
+        }
         break;
+      }
       case Kind.INLINE_FRAGMENT: {
         const typeCondition = selection.typeCondition;
         const inlineFragmentType = typeCondition
@@ -824,7 +871,7 @@ function _collectFieldsAndFragmentNames(
           inlineFragmentType,
           selection.selectionSet,
           nodeAndDefs,
-          fragmentNames,
+          fragmentSpreadsByname,
         );
         break;
       }

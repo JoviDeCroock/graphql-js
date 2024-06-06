@@ -33,6 +33,8 @@ import { NoFragmentCyclesRule } from './rules/NoFragmentCyclesRule.js';
 import { NoUndefinedVariablesRule } from './rules/NoUndefinedVariablesRule.js';
 // Spec Section: "Fragments must be used"
 import { NoUnusedFragmentsRule } from './rules/NoUnusedFragmentsRule.js';
+// Spec Section: "All Fragment Variables Used"
+import { NoUnusedFragmentVariablesRule } from './rules/NoUnusedFragmentVariablesRule.js';
 // Spec Section: "All Variables Used"
 import { NoUnusedVariablesRule } from './rules/NoUnusedVariablesRule.js';
 // Spec Section: "Field Selection Merging"
@@ -107,6 +109,7 @@ export const specifiedRules: ReadonlyArray<ValidationRule> = Object.freeze([
   UniqueVariableNamesRule,
   NoUndefinedVariablesRule,
   NoUnusedVariablesRule,
+  NoUnusedFragmentVariablesRule,
   KnownDirectivesRule,
   UniqueDirectivesPerLocationRule,
   DeferStreamDirectiveOnRootFieldRule,

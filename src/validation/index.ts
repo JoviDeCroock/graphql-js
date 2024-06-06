@@ -51,6 +51,9 @@ export { NoUnusedFragmentsRule } from './rules/NoUnusedFragmentsRule.js';
 // Spec Section: "All Variables Used"
 export { NoUnusedVariablesRule } from './rules/NoUnusedVariablesRule.js';
 
+// Spec Section: "All Fragment Variables Used"
+export { NoUnusedFragmentVariablesRule } from './rules/NoUnusedFragmentVariablesRule.js';
+
 // Spec Section: "Field Selection Merging"
 export { OverlappingFieldsCanBeMergedRule } from './rules/OverlappingFieldsCanBeMergedRule.js';
 
