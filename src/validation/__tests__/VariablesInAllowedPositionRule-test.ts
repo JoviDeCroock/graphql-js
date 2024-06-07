@@ -394,8 +394,7 @@ describe('Validate: Variables are in allowed positions', () => {
       `);
     });
 
-    // TODO: figure out the failure here, could be the position of the arguments
-    it.skip('Boolean => Boolean!', () => {
+    it('Boolean => Boolean!', () => {
       expectErrors(`
         query Query($ab: Boolean)
         {
@@ -418,8 +417,7 @@ describe('Validate: Variables are in allowed positions', () => {
       ]);
     });
 
-    // TODO: figure out the failure here, could be the position of the arguments
-    it.skip('Int => Int! fails when variable provides null default value', () => {
+    it('Int => Int! fails when variable provides null default value', () => {
       expectErrors(`
         query Query($intVar: Int = null) {
           complicatedArgs {
