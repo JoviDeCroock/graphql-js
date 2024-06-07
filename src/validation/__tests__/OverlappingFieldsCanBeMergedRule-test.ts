@@ -1303,6 +1303,7 @@ describe('Validate: Overlapping fields can be merged', () => {
       ]);
     });
 
+    // This is currently not validated, should we?
     it.skip('encounters nested field conflict in fragments that could otherwise merge', () => {
       expectErrors(`
         query ValidDifferingFragmentArgs($command1: DogCommand, $command2: DogCommand) {
