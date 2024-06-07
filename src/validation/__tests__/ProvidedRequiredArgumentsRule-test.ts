@@ -434,7 +434,7 @@ describe('Validate: Provided required arguments', () => {
             'Fragment "F" argument "x" of type "{ kind: "NonNullType", type: { kind: "NamedType", name: [Object], loc: [Object] }, loc: [Object] }" is required, but it was not provided.',
           locations: [
             { line: 3, column: 13 },
-            { line: 6, column: 22 },
+            { line: 5, column: 22 },
           ],
         },
       ]);
