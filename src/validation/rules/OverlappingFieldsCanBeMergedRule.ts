@@ -170,8 +170,10 @@ type FieldsAndFragmentSpreads = readonly [
  */
 
 const printFragmentSpreadArguments = (fragmentSpread: FragmentSpreadNode) => {
-  if (!fragmentSpread.arguments || fragmentSpread.arguments.length === 0)
+  if (!fragmentSpread.arguments || fragmentSpread.arguments.length === 0) {
     return fragmentSpread.name.value;
+  }
+
   const printedArguments: Array<string> = fragmentSpread.arguments
     .map(print)
     .sort((a, b) => a.localeCompare(b));
@@ -212,7 +214,7 @@ function findConflictsWithinSelectionSet(
     allFragmentSpreads.push(...fragmentSpreads);
     for (let i = 0; i < fragmentSpreads.length; i++) {
       if (
-        fragmentSpreads[i + 1] &&
+        Boolean(fragmentSpreads[i + 1]) &&
         !sameArguments(fragmentSpreads[i], fragmentSpreads[i + 1])
       ) {
         context.reportError(
@@ -304,9 +306,10 @@ function collectConflictsBetweenFieldsAndFragment(
 
   // (E) Then collect any conflicts between the provided collection of fields
   // and any fragment names found in the given fragment.
-  for (const [referencedFragmentName, fragmentSpread] of Object.entries(
-    referencedFragmentNames,
-  )) {
+  for (const [
+    referencedFragmentName,
+    [spread],
+  ] of referencedFragmentNames.entries()) {
     // Memoize so two fragments are not compared for conflicts more than once.
     if (
       comparedFragmentPairs.has(
@@ -330,7 +333,7 @@ function collectConflictsBetweenFieldsAndFragment(
       comparedFragmentPairs,
       areMutuallyExclusive,
       fieldMap,
-      fragmentSpread,
+      spread,
     );
   }
 }
@@ -351,8 +354,21 @@ function collectConflictsBetweenFragments(
   // No need to compare a fragment to itself.
   if (
     fragmentName1 === fragmentName2 &&
-    sameArguments(fragmentSpread1, fragmentSpread2)
+    !sameArguments(fragmentSpread1, fragmentSpread2)
   ) {
+    context.reportError(
+      new GraphQLError(
+        `Spreads "${fragmentName1}" conflict because ${printFragmentSpreadArguments(
+          fragmentSpread1,
+        )} and ${printFragmentSpreadArguments(
+          fragmentSpread2,
+        )} have different fragment arguments.`,
+        { nodes: [fragmentSpread1, fragmentSpread2] },
+      ),
+    );
+  }
+
+  if (fragmentName1 === fragmentName2) {
     return;
   }
 

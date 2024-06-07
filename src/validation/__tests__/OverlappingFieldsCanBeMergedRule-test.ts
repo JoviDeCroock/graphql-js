@@ -1303,7 +1303,6 @@ describe('Validate: Overlapping fields can be merged', () => {
       ]);
     });
 
-    // TODO
     it.skip('encounters nested field conflict in fragments that could otherwise merge', () => {
       expectErrors(`
         query ValidDifferingFragmentArgs($command1: DogCommand, $command2: DogCommand) {
@@ -1334,7 +1333,7 @@ describe('Validate: Overlapping fields can be merged', () => {
       ]);
     });
 
-    it.skip('encounters nested conflict in fragments', () => {
+    it('encounters nested conflict in fragments', () => {
       expectErrors(`
         {
           connection {
@@ -1357,14 +1356,16 @@ describe('Validate: Overlapping fields can be merged', () => {
       `).toDeepEqual([
         {
           message:
-            'Fields "connection" conflict because subfields "edges" conflict because child spreads "WithArgs" conflict because WithArgs(x: 3) and WithArgs(x: 4) have different fragment arguments. Use different aliases on the fields to fetch both if this was intentional.',
+            'Spreads "WithArgs" conflict because WithArgs(x: 3) and WithArgs(x: 4) have different fragment arguments.',
           locations: [
-            { line: 3, column: 11 },
-            { line: 4, column: 13 },
-            { line: 5, column: 15 },
-            { line: 12, column: 11 },
-            { line: 13, column: 13 },
-            { line: 14, column: 15 },
+            {
+              column: 15,
+              line: 5,
+            },
+            {
+              column: 15,
+              line: 13,
+            },
           ],
         },
       ]);

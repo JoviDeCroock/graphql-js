@@ -27,7 +27,8 @@ import type {
 import type { GraphQLDirective } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
-import { TypeInfo, visitWithTypeInfo } from '../utilities/TypeInfo.js';
+import type { TypeInfo } from '../utilities/TypeInfo.js';
+import { visitWithTypeInfo } from '../utilities/TypeInfo.js';
 
 type NodeWithSelectionSet = OperationDefinitionNode | FragmentDefinitionNode;
 interface VariableUsage {
