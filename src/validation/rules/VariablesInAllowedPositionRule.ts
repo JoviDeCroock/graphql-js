@@ -57,7 +57,6 @@ export function VariablesInAllowedPositionRule(
                 defaultValue,
               )
             ) {
-              console.log('not allowed')
               const varTypeStr = inspect(varType);
               const typeStr = inspect(type);
               context.reportError(
@@ -93,7 +92,6 @@ function allowedVariableUsage(
     const hasNonNullVariableDefaultValue =
       varDefaultValue != null && varDefaultValue.kind !== Kind.NULL;
     const hasLocationDefaultValue = locationDefaultValue !== undefined;
-    console.log(hasNonNullVariableDefaultValue, hasLocationDefaultValue)
     if (!hasNonNullVariableDefaultValue && !hasLocationDefaultValue) {
       return false;
     }
