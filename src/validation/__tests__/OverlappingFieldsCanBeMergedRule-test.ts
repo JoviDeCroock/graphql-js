@@ -1303,6 +1303,31 @@ describe('Validate: Overlapping fields can be merged', () => {
       ]);
     });
 
+    // Proposed by Benjie
+    // these don't really need to conflict but they do
+    // we could pre-parse the query or get knowledge that
+    // $x is equal to $y here.
+    it('encounters conflict in fragment/field', () => {
+      expectErrors(`
+        query ($y: Int = 1) {
+          a(x: $y)
+          ...WithArgs(x: $y)
+        }
+        fragment WithArgs($x: Int) on Type {
+          a(x: $x)
+        }
+      `).toDeepEqual([
+        {
+          message:
+            'Fields "a" conflict because they have differing arguments. Use different aliases on the fields to fetch both if this was intentional.',
+          locations: [
+            { line: 3, column: 11 },
+            { line: 7, column: 11 },
+          ],
+        },
+      ]);
+    });
+
     // This is currently not validated, should we?
     it.skip('encounters nested field conflict in fragments that could otherwise merge', () => {
       expectErrors(`

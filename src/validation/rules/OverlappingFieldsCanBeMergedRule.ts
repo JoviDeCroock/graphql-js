@@ -210,25 +210,8 @@ function findConflictsWithinSelectionSet(
   );
 
   const allFragmentSpreads = [];
-  for (const [name, fragmentSpreads] of fragmentSpreadMap.entries()) {
+  for (const [, fragmentSpreads] of fragmentSpreadMap.entries()) {
     allFragmentSpreads.push(...fragmentSpreads);
-    for (let i = 0; i < fragmentSpreads.length; i++) {
-      if (
-        Boolean(fragmentSpreads[i + 1]) &&
-        !sameArguments(fragmentSpreads[i], fragmentSpreads[i + 1])
-      ) {
-        context.reportError(
-          new GraphQLError(
-            `Spreads "${name}" conflict because ${printFragmentSpreadArguments(
-              fragmentSpreads[i],
-            )} and ${printFragmentSpreadArguments(
-              fragmentSpreads[i + 1],
-            )} have different fragment arguments.`,
-            { nodes: [fragmentSpreads[i], fragmentSpreads[i + 1]] },
-          ),
-        );
-      }
-    }
   }
 
   // (B) Then collect conflicts between these fields and those represented by
