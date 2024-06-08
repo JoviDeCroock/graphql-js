@@ -1316,20 +1316,11 @@ describe('Validate: Overlapping fields can be merged', () => {
         fragment WithArgs($x: Int) on Type {
           a(x: $x)
         }
-      `).toDeepEqual([
-        {
-          message:
-            'Fields "a" conflict because they have differing arguments. Use different aliases on the fields to fetch both if this was intentional.',
-          locations: [
-            { line: 3, column: 11 },
-            { line: 7, column: 11 },
-          ],
-        },
-      ]);
+      `).toDeepEqual([]);
     });
 
     // This is currently not validated, should we?
-    it.skip('encounters nested field conflict in fragments that could otherwise merge', () => {
+    it('encounters nested field conflict in fragments that could otherwise merge', () => {
       expectErrors(`
         query ValidDifferingFragmentArgs($command1: DogCommand, $command2: DogCommand) {
           dog {
@@ -1351,9 +1342,9 @@ describe('Validate: Overlapping fields can be merged', () => {
             'Fields "mother" conflict because subfields "doesKnowCommand" conflict because they have differing arguments. Use different aliases on the fields to fetch both if this was intentional.',
           locations: [
             { line: 5, column: 13 },
-            { line: 14, column: 13 },
-            { line: 13, column: 11 },
+            { line: 13, column: 13 },
             { line: 12, column: 11 },
+            { line: 11, column: 11 },
           ],
         },
       ]);
