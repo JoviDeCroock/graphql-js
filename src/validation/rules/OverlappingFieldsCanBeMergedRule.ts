@@ -14,6 +14,7 @@ import type {
 import { Kind } from '../../language/kinds.js';
 import { print } from '../../language/printer.js';
 import type { ASTVisitor } from '../../language/visitor.js';
+import { visit } from '../../language/visitor.js';
 
 import type {
   GraphQLField,
@@ -264,10 +265,11 @@ function collectConflictsBetweenFieldsAndFragment(
   }
 
   const [fieldMap2, referencedFragmentNames] =
-    getReferencedFieldsAndFragmentNames(
+    getReferencedFieldsAndFragmentSpreads(
       context,
       cachedFieldsAndFragmentNames,
       fragment,
+      fragmentSpread,
     );
 
   // Do not compare a fragment's fieldMap to itself.
@@ -349,23 +351,23 @@ function collectConflictsBetweenFragments(
         { nodes: [fragmentSpread1, fragmentSpread2] },
       ),
     );
-  }
-
-  if (fragmentName1 === fragmentName2) {
     return;
   }
 
-  // Memoize so two fragments are not compared for conflicts more than once.
   if (
-    comparedFragmentPairs.has(
-      fragmentName1,
-      fragmentName2,
-      areMutuallyExclusive,
-    )
+    fragmentName1 === fragmentName2 &&
+    sameArguments(fragmentSpread1, fragmentSpread2)
   ) {
     return;
   }
-  comparedFragmentPairs.add(fragmentName1, fragmentName2, areMutuallyExclusive);
+
+  const fragKey1 = printFragmentSpreadArguments(fragmentSpread1);
+  const fragKey2 = printFragmentSpreadArguments(fragmentSpread2);
+  // Memoize so two fragments are not compared for conflicts more than once.
+  if (comparedFragmentPairs.has(fragKey1, fragKey2, areMutuallyExclusive)) {
+    return;
+  }
+  comparedFragmentPairs.add(fragKey1, fragKey2, areMutuallyExclusive);
 
   const fragment1 = context.getFragment(fragmentName1);
   const fragment2 = context.getFragment(fragmentName2);
@@ -374,16 +376,18 @@ function collectConflictsBetweenFragments(
   }
 
   const [fieldMap1, referencedFragmentNames1] =
-    getReferencedFieldsAndFragmentNames(
+    getReferencedFieldsAndFragmentSpreads(
       context,
       cachedFieldsAndFragmentNames,
       fragment1,
+      fragmentSpread1,
     );
   const [fieldMap2, referencedFragmentNames2] =
-    getReferencedFieldsAndFragmentNames(
+    getReferencedFieldsAndFragmentSpreads(
       context,
       cachedFieldsAndFragmentNames,
       fragment2,
+      fragmentSpread2,
     );
 
   // (F) First, collect all conflicts between these two collections of fields
@@ -804,14 +808,28 @@ function getFieldsAndFragmentSpreads(
 }
 
 // Given a reference to a fragment, return the represented collection of fields
-// as well as a list of nested fragment names referenced via fragment spreads.
-function getReferencedFieldsAndFragmentNames(
+// as well as a list of nested fragment spreads.
+function getReferencedFieldsAndFragmentSpreads(
   context: ValidationContext,
   cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   fragment: FragmentDefinitionNode,
+  fragmentSpread: FragmentSpreadNode,
 ) {
+  const args = fragmentSpread.arguments;
+  const fragmentSelectionSet = visit(fragment.selectionSet, {
+    Variable: (node) => {
+      const name = node.name.value;
+      const argNode = args?.find((arg) => arg.name.value === name);
+      if (argNode) {
+        return argNode.value;
+      }
+
+      return node;
+    },
+  });
+
   // Short-circuit building a type from the node if possible.
-  const cached = cachedFieldsAndFragmentNames.get(fragment.selectionSet);
+  const cached = cachedFieldsAndFragmentNames.get(fragmentSelectionSet);
   if (cached) {
     return cached;
   }
@@ -821,7 +839,7 @@ function getReferencedFieldsAndFragmentNames(
     context,
     cachedFieldsAndFragmentNames,
     fragmentType,
-    fragment.selectionSet,
+    fragmentSelectionSet,
   );
 }
 
@@ -830,7 +848,7 @@ function _collectFieldsAndFragmentNames(
   parentType: Maybe<GraphQLNamedType>,
   selectionSet: SelectionSetNode,
   nodeAndDefs: NodeAndDefCollection,
-  fragmentSpreadsByname: Map<string, Array<FragmentSpreadNode>>,
+  fragmentSpreadsByName: Map<string, Array<FragmentSpreadNode>>,
 ): void {
   for (const selection of selectionSet.selections) {
     switch (selection.kind) {
@@ -853,11 +871,11 @@ function _collectFieldsAndFragmentNames(
         break;
       }
       case Kind.FRAGMENT_SPREAD: {
-        const existing = fragmentSpreadsByname.get(selection.name.value);
+        const existing = fragmentSpreadsByName.get(selection.name.value);
         if (existing) {
           existing.push(selection);
         } else {
-          fragmentSpreadsByname.set(selection.name.value, [selection]);
+          fragmentSpreadsByName.set(selection.name.value, [selection]);
         }
         break;
       }
@@ -871,7 +889,7 @@ function _collectFieldsAndFragmentNames(
           inlineFragmentType,
           selection.selectionSet,
           nodeAndDefs,
-          fragmentSpreadsByname,
+          fragmentSpreadsByName,
         );
         break;
       }
