@@ -13,7 +13,8 @@ import type {
 } from '../../language/ast.js';
 import { Kind } from '../../language/kinds.js';
 import { print } from '../../language/printer.js';
-import { visit, type ASTVisitor } from '../../language/visitor.js';
+import type { ASTVisitor } from '../../language/visitor.js';
+import { visit } from '../../language/visitor.js';
 
 import type {
   GraphQLField,
@@ -268,7 +269,7 @@ function collectConflictsBetweenFieldsAndFragment(
       context,
       cachedFieldsAndFragmentNames,
       fragment,
-      fragmentSpread
+      fragmentSpread,
     );
 
   // Do not compare a fragment's fieldMap to itself.
@@ -353,20 +354,17 @@ function collectConflictsBetweenFragments(
     return;
   }
 
-  if (fragmentName1 === fragmentName2 && sameArguments(fragmentSpread1, fragmentSpread2)) {
+  if (
+    fragmentName1 === fragmentName2 &&
+    sameArguments(fragmentSpread1, fragmentSpread2)
+  ) {
     return;
   }
 
   const fragKey1 = printFragmentSpreadArguments(fragmentSpread1);
   const fragKey2 = printFragmentSpreadArguments(fragmentSpread2);
   // Memoize so two fragments are not compared for conflicts more than once.
-  if (
-    comparedFragmentPairs.has(
-      fragKey1,
-      fragKey2,
-      areMutuallyExclusive,
-    )
-  ) {
+  if (comparedFragmentPairs.has(fragKey1, fragKey2, areMutuallyExclusive)) {
     return;
   }
   comparedFragmentPairs.add(fragKey1, fragKey2, areMutuallyExclusive);
@@ -382,14 +380,14 @@ function collectConflictsBetweenFragments(
       context,
       cachedFieldsAndFragmentNames,
       fragment1,
-      fragmentSpread1
+      fragmentSpread1,
     );
   const [fieldMap2, referencedFragmentNames2] =
     getReferencedFieldsAndFragmentSpreads(
       context,
       cachedFieldsAndFragmentNames,
       fragment2,
-      fragmentSpread2
+      fragmentSpread2,
     );
 
   // (F) First, collect all conflicts between these two collections of fields
@@ -815,7 +813,7 @@ function getReferencedFieldsAndFragmentSpreads(
   context: ValidationContext,
   cachedFieldsAndFragmentNames: Map<SelectionSetNode, FieldsAndFragmentSpreads>,
   fragment: FragmentDefinitionNode,
-  fragmentSpread: FragmentSpreadNode
+  fragmentSpread: FragmentSpreadNode,
 ) {
   const args = fragmentSpread.arguments;
   // TODO: a possible solution to the two problems outlined in the tests
@@ -828,9 +826,9 @@ function getReferencedFieldsAndFragmentSpreads(
         return argNode.value;
       }
 
-      return node
-    }
-  })
+      return node;
+    },
+  });
 
   // Short-circuit building a type from the node if possible.
   const cached = cachedFieldsAndFragmentNames.get(fragmentSelectionSet);
