@@ -22,7 +22,7 @@ import type {
   CancellableStreamRecord,
   ExecutionResult,
   ExperimentalIncrementalExecutionResults,
-} from './IncrementalPublisher.js';
+} from './types.js';
 /**
  * Terminology
  *
@@ -60,8 +60,9 @@ export interface ExecutionContext {
   fieldResolver: GraphQLFieldResolver<any, any>;
   typeResolver: GraphQLTypeResolver<any, any>;
   subscribeFieldResolver: GraphQLFieldResolver<any, any>;
-  errors: Array<GraphQLError>;
-  cancellableStreams: Set<CancellableStreamRecord>;
+  enableEarlyExecution: boolean;
+  errors: Array<GraphQLError> | undefined;
+  cancellableStreams: Set<CancellableStreamRecord> | undefined;
 }
 export interface ExecutionArgs {
   schema: GraphQLSchema;
@@ -75,6 +76,7 @@ export interface ExecutionArgs {
   fieldResolver?: Maybe<GraphQLFieldResolver<any, any>>;
   typeResolver?: Maybe<GraphQLTypeResolver<any, any>>;
   subscribeFieldResolver?: Maybe<GraphQLFieldResolver<any, any>>;
+  enableEarlyExecution?: Maybe<boolean>;
 }
 export interface StreamUsage {
   label: string | undefined;
