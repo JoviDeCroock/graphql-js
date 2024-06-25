@@ -25,6 +25,7 @@ export function introspectionFromSchema(
     directiveIsRepeatable: true,
     schemaDescription: true,
     inputValueDeprecation: true,
+    oneOf: true,
     ...options,
   };
   const document = parse(getIntrospectionQuery(optionsWithDefaults));
