@@ -22,11 +22,15 @@ import {
   GraphQLObjectType,
   GraphQLScalarType,
 } from '../../type/definition.js';
-import { GraphQLString } from '../../type/scalars.js';
+import { GraphQLBoolean, GraphQLString } from '../../type/scalars.js';
 import { GraphQLSchema } from '../../type/schema.js';
 
 import { executeSync } from '../execute.js';
 import { getVariableValues } from '../values.js';
+import { GraphQLSkipDirective } from '../../type/directives.js';
+import { GraphQLIncludeDirective } from '../../type/directives.js';
+import { GraphQLDirective } from '../../type/directives.js';
+import { DirectiveLocation } from '../../language/directiveLocation.js';
 
 const TestFaultyScalarGraphQLError = new GraphQLError(
   'FaultyScalarErrorMessage',
@@ -154,7 +158,30 @@ const TestType = new GraphQLObjectType({
   },
 });
 
-const schema = new GraphQLSchema({ query: TestType });
+const schema = new GraphQLSchema({
+  query: TestType,
+  directives: [
+    new GraphQLDirective({
+      name: 'skip',
+      description:
+        'Directs the executor to skip this field or fragment when the `if` argument is true.',
+      locations: [
+        DirectiveLocation.FIELD,
+        DirectiveLocation.FRAGMENT_SPREAD,
+        DirectiveLocation.INLINE_FRAGMENT,
+      ],
+      args: {
+        if: {
+          type: new GraphQLNonNull(GraphQLBoolean),
+          description: 'Skipped when true.',
+          // default values will override operation variables in the setting of defined fragment variables that are not provided
+          defaultValue: true,
+        },
+      },
+    }),
+    GraphQLIncludeDirective,
+  ],
+});
 
 function executeQuery(
   query: string,
@@ -1441,6 +1468,20 @@ describe('Execute: Handles inputs', () => {
           ...a(value: true)
         }
         fragment a($value: Boolean!) on TestType {
+          fieldWithNonNullableStringInput @skip(if: $value)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {},
+      });
+    });
+
+    it('when a nullable argument to a directive with a field default is not provided and shadowed by an operation variable', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query($value: Boolean) {
+          ...a
+        }
+        fragment a($value: Boolean) on TestType {
           fieldWithNonNullableStringInput @skip(if: $value)
         }
       `);
