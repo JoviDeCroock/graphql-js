@@ -1434,5 +1434,19 @@ describe('Execute: Handles inputs', () => {
         },
       });
     });
+
+    it('when argument passed to a directive', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query {
+          ...a(value: true)
+        }
+        fragment a($value: Boolean!) on TestType {
+          fieldWithNonNullableStringInput @skip(if: $value)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {},
+      });
+    });
   });
 });
