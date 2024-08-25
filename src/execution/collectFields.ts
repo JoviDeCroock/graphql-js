@@ -164,8 +164,12 @@ function collectFieldsImpl(
   for (const selection of selectionSet.selections) {
     switch (selection.kind) {
       case Kind.FIELD: {
-        const vars = localVariableValues ?? variableValues;
-        if (!shouldIncludeNode(vars, selection)) {
+        if (
+          !shouldIncludeNode(
+            { ...variableValues, ...localVariableValues },
+            selection,
+          )
+        ) {
           continue;
         }
         groupedFieldSet.add(getFieldEntryKey(selection), {
@@ -177,7 +181,10 @@ function collectFieldsImpl(
       }
       case Kind.INLINE_FRAGMENT: {
         if (
-          !shouldIncludeNode(variableValues, selection) ||
+          !shouldIncludeNode(
+            { ...variableValues, ...localVariableValues },
+            selection,
+          ) ||
           !doesFragmentConditionMatch(schema, selection, runtimeType)
         ) {
           continue;
@@ -216,7 +223,7 @@ function collectFieldsImpl(
 
         const newDeferUsage = getDeferUsage(
           operation,
-          variableValues,
+          { ...variableValues, ...localVariableValues },
           selection,
           deferUsage,
         );
@@ -224,7 +231,10 @@ function collectFieldsImpl(
         if (
           !newDeferUsage &&
           (visitedFragmentNames.has(fragmentName) ||
-            !shouldIncludeNode(variableValues, selection))
+            !shouldIncludeNode(
+              { ...variableValues, ...localVariableValues },
+              selection,
+            ))
         ) {
           continue;
         }

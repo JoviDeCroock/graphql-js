@@ -7,6 +7,7 @@ import { inspect } from '../../jsutils/inspect.js';
 
 import { GraphQLError } from '../../error/GraphQLError.js';
 
+import { DirectiveLocation } from '../../language/directiveLocation.js';
 import { Kind } from '../../language/kinds.js';
 import { parse } from '../../language/parser.js';
 
@@ -22,15 +23,15 @@ import {
   GraphQLObjectType,
   GraphQLScalarType,
 } from '../../type/definition.js';
+import {
+  GraphQLDirective,
+  GraphQLIncludeDirective,
+} from '../../type/directives.js';
 import { GraphQLBoolean, GraphQLString } from '../../type/scalars.js';
 import { GraphQLSchema } from '../../type/schema.js';
 
 import { executeSync } from '../execute.js';
 import { getVariableValues } from '../values.js';
-import { GraphQLSkipDirective } from '../../type/directives.js';
-import { GraphQLIncludeDirective } from '../../type/directives.js';
-import { GraphQLDirective } from '../../type/directives.js';
-import { DirectiveLocation } from '../../language/directiveLocation.js';
 
 const TestFaultyScalarGraphQLError = new GraphQLError(
   'FaultyScalarErrorMessage',
@@ -1506,8 +1507,21 @@ describe('Execute: Handles inputs', () => {
           fieldWithNonNullableStringInput @skip(if: $value)
         }
       `);
-      expect(result).to.deep.equal({
-        data: {},
+
+      expectJSON(result).toDeepEqual({
+        data: null,
+        errors: [
+          {
+            locations: [
+              {
+                column: 53,
+                line: 6,
+              },
+            ],
+            message:
+              'Argument "if" of non-null type "Boolean!" must not be null.',
+          },
+        ],
       });
     });
   });
