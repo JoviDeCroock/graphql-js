@@ -164,8 +164,13 @@ function collectFieldsImpl(
   for (const selection of selectionSet.selections) {
     switch (selection.kind) {
       case Kind.FIELD: {
-        const vars = localVariableValues ?? variableValues;
-        if (!shouldIncludeNode(vars, selection)) {
+        if (
+          !shouldIncludeNode(
+            variableValues,
+            selection,
+            context.localVariableValues,
+          )
+        ) {
           continue;
         }
         groupedFieldSet.add(getFieldEntryKey(selection), {
@@ -177,7 +182,11 @@ function collectFieldsImpl(
       }
       case Kind.INLINE_FRAGMENT: {
         if (
-          !shouldIncludeNode(variableValues, selection) ||
+          !shouldIncludeNode(
+            variableValues,
+            selection,
+            context.localVariableValues,
+          ) ||
           !doesFragmentConditionMatch(schema, selection, runtimeType)
         ) {
           continue;
@@ -188,6 +197,7 @@ function collectFieldsImpl(
           variableValues,
           selection,
           deferUsage,
+          context.localVariableValues,
         );
 
         if (!newDeferUsage) {
@@ -219,12 +229,17 @@ function collectFieldsImpl(
           variableValues,
           selection,
           deferUsage,
+          context.localVariableValues,
         );
 
         if (
           !newDeferUsage &&
           (visitedFragmentNames.has(fragmentName) ||
-            !shouldIncludeNode(variableValues, selection))
+            !shouldIncludeNode(
+              variableValues,
+              selection,
+              context.localVariableValues,
+            ))
         ) {
           continue;
         }
@@ -291,8 +306,14 @@ function getDeferUsage(
   variableValues: { [variable: string]: unknown },
   node: FragmentSpreadNode | InlineFragmentNode,
   parentDeferUsage: DeferUsage | undefined,
+  fragmentVariableValues: { [variable: string]: unknown } | undefined,
 ): DeferUsage | undefined {
-  const defer = getDirectiveValues(GraphQLDeferDirective, node, variableValues);
+  const defer = getDirectiveValues(
+    GraphQLDeferDirective,
+    node,
+    variableValues,
+    fragmentVariableValues,
+  );
 
   if (!defer) {
     return;
@@ -320,8 +341,14 @@ function getDeferUsage(
 function shouldIncludeNode(
   variableValues: { [variable: string]: unknown },
   node: FragmentSpreadNode | FieldNode | InlineFragmentNode,
+  fragmentVariableValues: { [variable: string]: unknown } | undefined,
 ): boolean {
-  const skip = getDirectiveValues(GraphQLSkipDirective, node, variableValues);
+  const skip = getDirectiveValues(
+    GraphQLSkipDirective,
+    node,
+    variableValues,
+    fragmentVariableValues,
+  );
   if (skip?.if === true) {
     return false;
   }
@@ -330,6 +357,7 @@ function shouldIncludeNode(
     GraphQLIncludeDirective,
     node,
     variableValues,
+    fragmentVariableValues,
   );
   if (include?.if === false) {
     return false;

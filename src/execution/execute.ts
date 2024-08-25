@@ -1029,7 +1029,8 @@ function getStreamUsage(
   const stream = getDirectiveValues(
     GraphQLStreamDirective,
     fieldGroup[0].node,
-    fieldGroup[0].fragmentVariableValues ?? exeContext.variableValues,
+    exeContext.variableValues,
+    fieldGroup[0].fragmentVariableValues,
   );
 
   if (!stream) {

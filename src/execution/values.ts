@@ -336,12 +336,18 @@ export function getDirectiveValues(
   directiveDef: GraphQLDirective,
   node: { readonly directives?: ReadonlyArray<DirectiveNode> | undefined },
   variableValues?: Maybe<ObjMap<unknown>>,
+  fragmentVariables?: Maybe<ObjMap<unknown>>,
 ): undefined | { [argument: string]: unknown } {
   const directiveNode = node.directives?.find(
     (directive) => directive.name.value === directiveDef.name,
   );
 
   if (directiveNode) {
-    return getArgumentValues(directiveNode, directiveDef.args, variableValues);
+    return getArgumentValues(
+      directiveNode,
+      directiveDef.args,
+      variableValues,
+      fragmentVariables,
+    );
   }
 }
