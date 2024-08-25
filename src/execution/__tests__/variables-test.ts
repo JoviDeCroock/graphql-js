@@ -30,8 +30,10 @@ import {
 import { GraphQLBoolean, GraphQLString } from '../../type/scalars.js';
 import { GraphQLSchema } from '../../type/schema.js';
 
-import { executeSync } from '../execute.js';
+import { executeSync, experimentalExecuteIncrementally } from '../execute.js';
 import { getVariableValues } from '../values.js';
+import { isAsyncIterable } from '../../jsutils/isAsyncIterable.js';
+import { isPromise } from 'util/types';
 
 const TestFaultyScalarGraphQLError = new GraphQLError(
   'FaultyScalarErrorMessage',
@@ -1499,30 +1501,23 @@ describe('Execute: Handles inputs', () => {
     });
 
     it('when a nullable argument to a directive with a field default is not provided and shadowed by an operation variable', () => {
-      const result = executeQueryWithFragmentArguments(`
-        query($value: Boolean) {
-          ...a
-        }
-        fragment a($value: Boolean) on TestType {
-          fieldWithNonNullableStringInput @skip(if: $value)
-        }
-      `);
+      // this test uses the @defer directive and incremental delivery because the `if` argument for skip/include have no field defaults
+      const document = parse(
+        `
+          query($shouldDefer: Boolean = false) {
+            ...a
+          }
+          fragment a($shouldDefer: Boolean) on TestType {
+            ... @defer(if: $shouldDefer) {
+              fieldWithDefaultArgumentValue
+            }
+          }
+        `,
+        { experimentalFragmentArguments: true },
+      );
+      const result = experimentalExecuteIncrementally({ schema, document });
 
-      expectJSON(result).toDeepEqual({
-        data: null,
-        errors: [
-          {
-            locations: [
-              {
-                column: 53,
-                line: 6,
-              },
-            ],
-            message:
-              'Argument "if" of non-null type "Boolean!" must not be null.',
-          },
-        ],
-      });
+      expect(result).to.include.keys('initialResult', 'subsequentResults');
     });
   });
 });
