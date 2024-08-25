@@ -7,6 +7,7 @@ import { inspect } from '../../jsutils/inspect.js';
 
 import { GraphQLError } from '../../error/GraphQLError.js';
 
+import { DirectiveLocation } from '../../language/directiveLocation.js';
 import { Kind } from '../../language/kinds.js';
 import { parse } from '../../language/parser.js';
 
@@ -22,10 +23,14 @@ import {
   GraphQLObjectType,
   GraphQLScalarType,
 } from '../../type/definition.js';
-import { GraphQLString } from '../../type/scalars.js';
+import {
+  GraphQLDirective,
+  GraphQLIncludeDirective,
+} from '../../type/directives.js';
+import { GraphQLBoolean, GraphQLString } from '../../type/scalars.js';
 import { GraphQLSchema } from '../../type/schema.js';
 
-import { executeSync } from '../execute.js';
+import { executeSync, experimentalExecuteIncrementally } from '../execute.js';
 import { getVariableValues } from '../values.js';
 
 const TestFaultyScalarGraphQLError = new GraphQLError(
@@ -154,7 +159,30 @@ const TestType = new GraphQLObjectType({
   },
 });
 
-const schema = new GraphQLSchema({ query: TestType });
+const schema = new GraphQLSchema({
+  query: TestType,
+  directives: [
+    new GraphQLDirective({
+      name: 'skip',
+      description:
+        'Directs the executor to skip this field or fragment when the `if` argument is true.',
+      locations: [
+        DirectiveLocation.FIELD,
+        DirectiveLocation.FRAGMENT_SPREAD,
+        DirectiveLocation.INLINE_FRAGMENT,
+      ],
+      args: {
+        if: {
+          type: new GraphQLNonNull(GraphQLBoolean),
+          description: 'Skipped when true.',
+          // default values will override operation variables in the setting of defined fragment variables that are not provided
+          defaultValue: true,
+        },
+      },
+    }),
+    GraphQLIncludeDirective,
+  ],
+});
 
 function executeQuery(
   query: string,
@@ -1307,6 +1335,22 @@ describe('Execute: Handles inputs', () => {
       });
     });
 
+    it('when a nullable argument without a field default is not provided and shadowed by an operation variable', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query($x: String = "A") {
+          ...a
+        }
+        fragment a($x: String) on TestType {
+          fieldWithNullableStringInput(input: $x)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {
+          fieldWithNullableStringInput: null,
+        },
+      });
+    });
+
     it('when a nullable argument with a field default is not provided and shadowed by an operation variable', () => {
       const result = executeQueryWithFragmentArguments(`
         query($x: String = "A") {
@@ -1412,6 +1456,27 @@ describe('Execute: Handles inputs', () => {
       });
     });
 
+    it('when argument variables with the same name are used directly and recursively', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query {
+          ...a(value: "A")
+        }
+        fragment a($value: String!) on TestType {
+          ...b(value: "B")
+          fieldInFragmentA: fieldWithNonNullableStringInput(input: $value)
+        }
+        fragment b($value: String!) on TestType {
+          fieldInFragmentB: fieldWithNonNullableStringInput(input: $value)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {
+          fieldInFragmentA: '"A"',
+          fieldInFragmentB: '"B"',
+        },
+      });
+    });
+
     it('when argument passed in as list', () => {
       const result = executeQueryWithFragmentArguments(`
         query Q($opValue: String = "op") {
@@ -1433,6 +1498,39 @@ describe('Execute: Handles inputs', () => {
           cList: '[null]',
         },
       });
+    });
+
+    it('when argument passed to a directive', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query {
+          ...a(value: true)
+        }
+        fragment a($value: Boolean!) on TestType {
+          fieldWithNonNullableStringInput @skip(if: $value)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {},
+      });
+    });
+
+    it('when a nullable argument to a directive with a field default is not provided and shadowed by an operation variable', () => {
+      // this test uses the @defer directive and incremental delivery because the `if` argument for skip/include have no field defaults
+      const document = parse(
+        `
+          query($shouldDefer: Boolean = false) {
+            ...a
+          }
+          fragment a($shouldDefer: Boolean) on TestType {
+            ... @defer(if: $shouldDefer) {
+              fieldWithDefaultArgumentValue
+            }
+          }
+        `,
+        { experimentalFragmentArguments: true },
+      );
+      const result = experimentalExecuteIncrementally({ schema, document });
+      expect(result).to.include.keys('initialResult', 'subsequentResults');
     });
   });
 });
