@@ -1439,6 +1439,27 @@ describe('Execute: Handles inputs', () => {
       });
     });
 
+    it('when argument variables with the same name are used directly and recursively', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query {
+          ...a(value: "A")
+        }
+        fragment a($value: String!) on TestType {
+          ...b(value: "B")
+          fieldInFragmentA: fieldWithNonNullableStringInput(input: $value)
+        }
+        fragment b($value: String!) on TestType {
+          fieldInFragmentB: fieldWithNonNullableStringInput(input: $value)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {
+          fieldInFragmentA: '"A"',
+          fieldInFragmentB: '"B"',
+        },
+      });
+    });
+
     it('when argument passed in as list', () => {
       const result = executeQueryWithFragmentArguments(`
         query Q($opValue: String = "op") {
