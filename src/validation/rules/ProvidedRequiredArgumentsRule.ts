@@ -3,6 +3,8 @@ import { inspect } from '../../jsutils/inspect.js';
 import { GraphQLError } from '../../error/GraphQLError.js';
 
 import type {
+  FieldNode,
+  FragmentSpreadNode,
   InputValueDefinitionNode,
   VariableDefinitionNode,
 } from '../../language/ast.js';
@@ -13,6 +15,8 @@ import type { ASTVisitor } from '../../language/visitor.js';
 import type { GraphQLArgument } from '../../type/definition.js';
 import { isRequiredArgument, isType } from '../../type/definition.js';
 import { specifiedDirectives } from '../../type/directives.js';
+
+import type { GraphQLVariableSignature } from '../../utilities/getVariableSignature.js';
 
 import type {
   SDLValidationContext,
@@ -39,56 +43,51 @@ export function ProvidedRequiredArgumentsRule(
           return false;
         }
 
-        const providedArgs = new Set(
-          // FIXME: https://github.com/graphql/graphql-js/issues/2203
-          /* c8 ignore next */
-          fieldNode.arguments?.map((arg) => arg.name.value),
-        );
-        for (const argDef of fieldDef.args) {
-          if (!providedArgs.has(argDef.name) && isRequiredArgument(argDef)) {
-            const argTypeStr = inspect(argDef.type);
-            context.reportError(
-              new GraphQLError(
-                `Field "${fieldDef.name}" argument "${argDef.name}" of type "${argTypeStr}" is required, but it was not provided.`,
-                { nodes: fieldNode },
-              ),
-            );
-          }
-        }
+        hasRequiredArgs(context, fieldNode, fieldDef.args);
       },
     },
     FragmentSpread: {
-      // Validate on leave to allow for directive errors to appear first.
+      // Validate on leave to allow for deeper errors to appear first.
       leave(spreadNode) {
-        const fragmentDef = context.getFragment(spreadNode.name.value);
-        if (!fragmentDef) {
+        const fragmentSignature = context.getFragmentSignature();
+        if (!fragmentSignature) {
           return false;
         }
 
-        const providedArgs = new Set(
-          // FIXME: https://github.com/graphql/graphql-js/issues/2203
-          /* c8 ignore next */
-          spreadNode.arguments?.map((arg) => arg.name.value),
+        hasRequiredArgs(
+          context,
+          spreadNode,
+          Array.from(fragmentSignature.variableSignatures.values()),
         );
-        // FIXME: https://github.com/graphql/graphql-js/issues/2203
-        /* c8 ignore next */
-        for (const varDef of fragmentDef.variableDefinitions ?? []) {
-          if (
-            !providedArgs.has(varDef.variable.name.value) &&
-            isRequiredArgumentNode(varDef)
-          ) {
-            const argTypeStr = inspect(varDef.type);
-            context.reportError(
-              new GraphQLError(
-                `Fragment "${spreadNode.name.value}" argument "${varDef.variable.name.value}" of type "${argTypeStr}" is required, but it was not provided.`,
-                { nodes: [spreadNode, varDef] },
-              ),
-            );
-          }
-        }
       },
     },
   };
+}
+
+function hasRequiredArgs(
+  context: ValidationContext,
+  node: FieldNode | FragmentSpreadNode,
+  args: ReadonlyArray<GraphQLArgument | GraphQLVariableSignature>,
+): void {
+  const providedArgs = new Set(
+    // FIXME: https://github.com/graphql/graphql-js/issues/2203
+    /* c8 ignore next */
+    node.arguments?.map((arg) => arg.name.value),
+  );
+  for (const argDef of args) {
+    if (!providedArgs.has(argDef.name) && isRequiredArgument(argDef)) {
+      const locatedAtStr =
+        (node.kind === Kind.FIELD ? 'Field' : 'Fragment') +
+        ` "${node.name.value}"`;
+      const argTypeStr = inspect(argDef.type);
+      context.reportError(
+        new GraphQLError(
+          `${locatedAtStr} argument "${argDef.name}" of type "${argTypeStr}" is required, but it was not provided.`,
+          { nodes: node },
+        ),
+      );
+    }
+  }
 }
 
 /**

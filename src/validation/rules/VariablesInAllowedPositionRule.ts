@@ -3,7 +3,7 @@ import type { Maybe } from '../../jsutils/Maybe.js';
 
 import { GraphQLError } from '../../error/GraphQLError.js';
 
-import type { ValueNode, VariableDefinitionNode } from '../../language/ast.js';
+import type { ValueNode } from '../../language/ast.js';
 import { Kind } from '../../language/kinds.js';
 import type { ASTVisitor } from '../../language/visitor.js';
 
@@ -12,7 +12,6 @@ import { isNonNullType } from '../../type/definition.js';
 import type { GraphQLSchema } from '../../type/schema.js';
 
 import { isTypeSubTypeOf } from '../../utilities/typeComparators.js';
-import { typeFromAST } from '../../utilities/typeFromAST.js';
 
 import type { ValidationContext } from '../ValidationContext.js';
 
@@ -26,33 +25,39 @@ import type { ValidationContext } from '../ValidationContext.js';
 export function VariablesInAllowedPositionRule(
   context: ValidationContext,
 ): ASTVisitor {
-  let varDefMap: Map<string, VariableDefinitionNode>;
-
   return {
     OperationDefinition: {
-      enter() {
-        varDefMap = new Map();
-      },
       leave(operation) {
+        const operationSignature = context.getOperationSignature(operation);
+        const operationVariableSignatures =
+          operationSignature?.variableSignatures;
         const usages = context.getRecursiveVariableUsages(operation);
 
-        for (const { node, type, defaultValue, fragmentVarDef } of usages) {
+        for (const {
+          node,
+          type,
+          defaultValue,
+          fragmentVariableSignature,
+        } of usages) {
           const varName = node.name.value;
-          const varDef = fragmentVarDef ?? varDefMap.get(varName);
-          if (varDef && type) {
+
+          const signature =
+            fragmentVariableSignature ??
+            operationVariableSignatures?.get(varName);
+          if (signature && type) {
             // A var type is allowed if it is the same or more strict (e.g. is
             // a subtype of) than the expected type. It can be more strict if
             // the variable type is non-null when the expected type is nullable.
             // If both are list types, the variable item type can be more strict
             // than the expected item type (contravariant).
             const schema = context.getSchema();
-            const varType = typeFromAST(schema, varDef.type);
+            const varType = signature.type;
             if (
               varType &&
               !allowedVariableUsage(
                 schema,
                 varType,
-                varDef.defaultValue,
+                signature.definition.defaultValue,
                 type,
                 defaultValue,
               )
@@ -62,16 +67,13 @@ export function VariablesInAllowedPositionRule(
               context.reportError(
                 new GraphQLError(
                   `Variable "$${varName}" of type "${varTypeStr}" used in position expecting type "${typeStr}".`,
-                  { nodes: [varDef, node] },
+                  { nodes: [signature.definition, node] },
                 ),
               );
             }
           }
         }
       },
-    },
-    VariableDefinition(node) {
-      varDefMap.set(node.variable.name.value, node);
     },
   };
 }

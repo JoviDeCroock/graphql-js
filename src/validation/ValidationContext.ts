@@ -9,7 +9,6 @@ import type {
   FragmentSpreadNode,
   OperationDefinitionNode,
   SelectionSetNode,
-  VariableDefinitionNode,
   VariableNode,
 } from '../language/ast.js';
 import { Kind } from '../language/kinds.js';
@@ -27,15 +26,23 @@ import type {
 import type { GraphQLDirective } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
-import type { TypeInfo } from '../utilities/TypeInfo.js';
-import { visitWithTypeInfo } from '../utilities/TypeInfo.js';
+import type { GraphQLVariableSignature } from '../utilities/getVariableSignature.js';
+import { getVariableSignature } from '../utilities/getVariableSignature.js';
+import type { FragmentSignature } from '../utilities/TypeInfo.js';
+import { TypeInfo, visitWithTypeInfo } from '../utilities/TypeInfo.js';
+
+// TODO: consider converting this interface to a type alias
+// export type OperationSignature = Map<string, GraphQLVariableSignature>;
+export interface OperationSignature {
+  variableSignatures: Map<string, GraphQLVariableSignature>;
+}
 
 type NodeWithSelectionSet = OperationDefinitionNode | FragmentDefinitionNode;
 interface VariableUsage {
   readonly node: VariableNode;
   readonly type: Maybe<GraphQLInputType>;
   readonly defaultValue: Maybe<unknown>;
-  readonly fragmentVarDef: Maybe<VariableDefinitionNode>;
+  readonly fragmentVariableSignature: Maybe<GraphQLVariableSignature>;
 }
 
 /**
@@ -167,6 +174,11 @@ export type SDLValidationRule = (context: SDLValidationContext) => ASTVisitor;
 export class ValidationContext extends ASTValidationContext {
   private _schema: GraphQLSchema;
   private _typeInfo: TypeInfo;
+  private _operationSignatures: Map<
+    OperationDefinitionNode,
+    OperationSignature
+  >;
+
   private _variableUsages: Map<
     NodeWithSelectionSet,
     ReadonlyArray<VariableUsage>
@@ -186,6 +198,24 @@ export class ValidationContext extends ASTValidationContext {
     super(ast, onError);
     this._schema = schema;
     this._typeInfo = typeInfo;
+
+    this._operationSignatures = new Map();
+    for (const definition of ast.definitions) {
+      if (definition.kind === Kind.OPERATION_DEFINITION) {
+        const variableSignatures = new Map<string, GraphQLVariableSignature>();
+        const variableDefinitions = definition.variableDefinitions;
+        if (variableDefinitions) {
+          for (const variableDefinition of variableDefinitions) {
+            variableSignatures.set(
+              variableDefinition.variable.name.value,
+              getVariableSignature(schema, variableDefinition),
+            );
+          }
+        }
+        this._operationSignatures.set(definition, { variableSignatures });
+      }
+    }
+
     this._variableUsages = new Map();
     this._recursiveVariableUsages = new Map();
   }
@@ -198,28 +228,43 @@ export class ValidationContext extends ASTValidationContext {
     return this._schema;
   }
 
+  getOperationSignature(
+    operation: OperationDefinitionNode,
+  ): Maybe<OperationSignature> {
+    return this._operationSignatures.get(operation);
+  }
+
   getVariableUsages(node: NodeWithSelectionSet): ReadonlyArray<VariableUsage> {
     let usages = this._variableUsages.get(node);
     if (!usages) {
       const newUsages: Array<VariableUsage> = [];
-      const typeInfo = this._typeInfo;
-      const fragmentVariableDefinitions =
-        node.kind === Kind.FRAGMENT_DEFINITION
-          ? node.variableDefinitions
-          : undefined;
+      const typeInfo = new TypeInfo(
+        this._schema,
+        undefined,
+        undefined,
+        this._typeInfo.getFragmentSignatureByName(),
+      );
+      const fragmentDefinition =
+        node.kind === Kind.FRAGMENT_DEFINITION ? node : undefined;
       visit(
         node,
         visitWithTypeInfo(typeInfo, {
           VariableDefinition: () => false,
           Variable(variable) {
-            const fragmentVarDef = fragmentVariableDefinitions?.find(
-              (varDef) => varDef.variable.name.value === variable.name.value,
-            );
+            let fragmentVariableSignature;
+            if (fragmentDefinition) {
+              const fragmentSignature = typeInfo.getFragmentSignatureByName()(
+                fragmentDefinition.name.value,
+              );
+
+              fragmentVariableSignature =
+                fragmentSignature?.variableSignatures.get(variable.name.value);
+            }
             newUsages.push({
               node: variable,
               type: typeInfo.getInputType(),
               defaultValue: typeInfo.getDefaultValue(),
-              fragmentVarDef,
+              fragmentVariableSignature,
             });
           },
         }),
@@ -242,20 +287,6 @@ export class ValidationContext extends ASTValidationContext {
       this._recursiveVariableUsages.set(operation, usages);
     }
     return usages;
-  }
-
-  getOperationVariableUsages(
-    operation: OperationDefinitionNode,
-  ): ReadonlyArray<VariableUsage> {
-    let usages = this._recursiveVariableUsages.get(operation);
-    if (!usages) {
-      usages = this.getVariableUsages(operation);
-      for (const frag of this.getRecursivelyReferencedFragments(operation)) {
-        usages = usages.concat(this.getVariableUsages(frag));
-      }
-      this._recursiveVariableUsages.set(operation, usages);
-    }
-    return usages.filter(({ fragmentVarDef }) => !fragmentVarDef);
   }
 
   getType(): Maybe<GraphQLOutputType> {
@@ -284,6 +315,10 @@ export class ValidationContext extends ASTValidationContext {
 
   getArgument(): Maybe<GraphQLArgument> {
     return this._typeInfo.getArgument();
+  }
+
+  getFragmentSignature(): Maybe<FragmentSignature> {
+    return this._typeInfo.getFragmentSignature();
   }
 
   getEnumValue(): Maybe<GraphQLEnumValue> {

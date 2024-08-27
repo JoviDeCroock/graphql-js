@@ -68,6 +68,9 @@ describe('TypeInfo', () => {
     expect(typeInfo.getFieldDef()).to.equal(undefined);
     expect(typeInfo.getDefaultValue()).to.equal(undefined);
     expect(typeInfo.getDirective()).to.equal(null);
+    expect(typeInfo.getFragmentSignature()).to.equal(null);
+    expect(typeInfo.getFragmentSignatureByName()('')).to.equal(null);
+    expect(typeInfo.getFragmentArgument()).to.equal(null);
     expect(typeInfo.getArgument()).to.equal(null);
     expect(typeInfo.getEnumValue()).to.equal(null);
   });

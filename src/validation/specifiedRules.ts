@@ -31,10 +31,10 @@ import { MaxIntrospectionDepthRule } from './rules/MaxIntrospectionDepthRule.js'
 import { NoFragmentCyclesRule } from './rules/NoFragmentCyclesRule.js';
 // Spec Section: "All Variable Used Defined"
 import { NoUndefinedVariablesRule } from './rules/NoUndefinedVariablesRule.js';
+// Spec Section: "All Fragment Arguments Used"
+import { NoUnusedFragmentArgumentsRule } from './rules/NoUnusedFragmentArgumentsRule.js';
 // Spec Section: "Fragments must be used"
 import { NoUnusedFragmentsRule } from './rules/NoUnusedFragmentsRule.js';
-// Spec Section: "All Fragment Variables Used"
-import { NoUnusedFragmentVariablesRule } from './rules/NoUnusedFragmentVariablesRule.js';
 // Spec Section: "All Variables Used"
 import { NoUnusedVariablesRule } from './rules/NoUnusedVariablesRule.js';
 // Spec Section: "Field Selection Merging"
@@ -109,7 +109,7 @@ export const specifiedRules: ReadonlyArray<ValidationRule> = Object.freeze([
   UniqueVariableNamesRule,
   NoUndefinedVariablesRule,
   NoUnusedVariablesRule,
-  NoUnusedFragmentVariablesRule,
+  NoUnusedFragmentArgumentsRule,
   KnownDirectivesRule,
   UniqueDirectivesPerLocationRule,
   DeferStreamDirectiveOnRootFieldRule,

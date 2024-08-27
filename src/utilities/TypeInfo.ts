@@ -2,9 +2,9 @@ import type { Maybe } from '../jsutils/Maybe.js';
 
 import type {
   ASTNode,
+  DocumentNode,
   FieldNode,
   FragmentDefinitionNode,
-  FragmentSpreadNode,
 } from '../language/ast.js';
 import { isNode } from '../language/ast.js';
 import { Kind } from '../language/kinds.js';
@@ -35,8 +35,14 @@ import {
 import type { GraphQLDirective } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
+import type { GraphQLVariableSignature } from './getVariableSignature.js';
+import { getVariableSignature } from './getVariableSignature.js';
 import { typeFromAST } from './typeFromAST.js';
-import { valueFromAST } from './valueFromAST.js';
+
+export interface FragmentSignature {
+  readonly definition: FragmentDefinitionNode;
+  readonly variableSignatures: Map<string, GraphQLVariableSignature>;
+}
 
 /**
  * TypeInfo is a utility class which, given a GraphQL schema, can keep track
@@ -53,8 +59,12 @@ export class TypeInfo {
   private _directive: Maybe<GraphQLDirective>;
   private _argument: Maybe<GraphQLArgument>;
   private _enumValue: Maybe<GraphQLEnumValue>;
-  private _fragmentSpread: Maybe<FragmentSpreadNode>;
-  private _fragmentDefinitions: Map<string, FragmentDefinitionNode>;
+  private _fragmentSignaturesByName: (
+    fragmentName: string,
+  ) => Maybe<FragmentSignature>;
+
+  private _fragmentSignature: Maybe<FragmentSignature>;
+  private _fragmentArgument: Maybe<GraphQLVariableSignature>;
   private _getFieldDef: GetFieldDefFn;
 
   constructor(
@@ -66,7 +76,10 @@ export class TypeInfo {
     initialType?: Maybe<GraphQLType>,
 
     /** @deprecated will be removed in 17.0.0 */
-    getFieldDefFn?: GetFieldDefFn,
+    getFieldDefFn?: Maybe<GetFieldDefFn>,
+    fragmentSignatures?: Maybe<
+      (fragmentName: string) => Maybe<FragmentSignature>
+    >,
   ) {
     this._schema = schema;
     this._typeStack = [];
@@ -77,8 +90,9 @@ export class TypeInfo {
     this._directive = null;
     this._argument = null;
     this._enumValue = null;
-    this._fragmentSpread = null;
-    this._fragmentDefinitions = new Map();
+    this._fragmentSignaturesByName = fragmentSignatures ?? (() => null);
+    this._fragmentSignature = null;
+    this._fragmentArgument = null;
     this._getFieldDef = getFieldDefFn ?? getFieldDef;
     if (initialType) {
       if (isInputType(initialType)) {
@@ -129,6 +143,20 @@ export class TypeInfo {
     return this._argument;
   }
 
+  getFragmentSignature(): Maybe<FragmentSignature> {
+    return this._fragmentSignature;
+  }
+
+  getFragmentSignatureByName(): (
+    fragmentName: string,
+  ) => Maybe<FragmentSignature> {
+    return this._fragmentSignaturesByName;
+  }
+
+  getFragmentArgument(): Maybe<GraphQLVariableSignature> {
+    return this._fragmentArgument;
+  }
+
   getEnumValue(): Maybe<GraphQLEnumValue> {
     return this._enumValue;
   }
@@ -141,14 +169,9 @@ export class TypeInfo {
     // which occurs before guarantees of schema and document validity.
     switch (node.kind) {
       case Kind.DOCUMENT: {
-        // A document's fragment definitions are type signatures
-        // referenced via fragment spreads. Ensure we can use definitions
-        // before visiting their call sites.
-        for (const astNode of node.definitions) {
-          if (astNode.kind === Kind.FRAGMENT_DEFINITION) {
-            this._fragmentDefinitions.set(astNode.name.value, astNode);
-          }
-        }
+        const fragmentSignatures = getFragmentSignatures(schema, node);
+        this._fragmentSignaturesByName = (fragmentName: string) =>
+          fragmentSignatures.get(fragmentName);
         break;
       }
       case Kind.SELECTION_SET: {
@@ -181,7 +204,9 @@ export class TypeInfo {
         break;
       }
       case Kind.FRAGMENT_SPREAD: {
-        this._fragmentSpread = node;
+        this._fragmentSignature = this.getFragmentSignatureByName()(
+          node.name.value,
+        );
         break;
       }
       case Kind.INLINE_FRAGMENT:
@@ -203,52 +228,24 @@ export class TypeInfo {
       case Kind.ARGUMENT: {
         let argDef;
         let argType: unknown;
-        const directive = this.getDirective();
-        const fragmentSpread = this._fragmentSpread;
-        const fieldDef = this.getFieldDef();
-        if (directive) {
-          argDef = directive.args.find((arg) => arg.name === node.name.value);
-        } else if (fragmentSpread) {
-          const fragmentDef = this._fragmentDefinitions.get(
-            fragmentSpread.name.value,
-          );
-          const fragVarDef = fragmentDef?.variableDefinitions?.find(
-            (varDef) => varDef.variable.name.value === node.name.value,
-          );
-          if (fragVarDef) {
-            const fragVarType = typeFromAST(schema, fragVarDef.type);
-            if (isInputType(fragVarType)) {
-              const fragVarDefault = fragVarDef.defaultValue
-                ? valueFromAST(fragVarDef.defaultValue, fragVarType)
-                : undefined;
 
-              // Minor hack: transform the FragmentArgDef
-              // into a schema Argument definition, to
-              // enable visiting identically to field/directive args
-              const schemaArgDef: GraphQLArgument = {
-                name: fragVarDef.variable.name.value,
-                type: fragVarType,
-                defaultValue: fragVarDefault,
-                description: undefined,
-                deprecationReason: undefined,
-                extensions: {},
-                astNode: {
-                  ...fragVarDef,
-                  kind: Kind.INPUT_VALUE_DEFINITION,
-                  name: fragVarDef.variable.name,
-                },
-              };
-              argDef = schemaArgDef;
-            }
+        const fragmentSignature = this.getFragmentSignature();
+        if (fragmentSignature) {
+          argDef = fragmentSignature?.variableSignatures.get(node.name.value);
+          this._fragmentArgument = argDef;
+        } else {
+          const fieldOrDirective = this.getDirective() ?? this.getFieldDef();
+          if (fieldOrDirective) {
+            argDef = fieldOrDirective.args.find(
+              (arg) => arg.name === node.name.value,
+            );
+            this._argument = argDef;
           }
-        } else if (fieldDef) {
-          argDef = fieldDef.args.find((arg) => arg.name === node.name.value);
         }
+
         if (argDef) {
           argType = argDef.type;
         }
-
-        this._argument = argDef;
         this._defaultValueStack.push(argDef ? argDef.defaultValue : undefined);
         this._inputTypeStack.push(isInputType(argType) ? argType : undefined);
         break;
@@ -298,7 +295,8 @@ export class TypeInfo {
   leave(node: ASTNode) {
     switch (node.kind) {
       case Kind.DOCUMENT:
-        this._fragmentDefinitions = new Map();
+        this._fragmentSignaturesByName = /* c8 ignore start */ () =>
+          null /* c8 ignore end */;
         break;
       case Kind.SELECTION_SET:
         this._parentTypeStack.pop();
@@ -311,7 +309,7 @@ export class TypeInfo {
         this._directive = null;
         break;
       case Kind.FRAGMENT_SPREAD:
-        this._fragmentSpread = null;
+        this._fragmentSignature = null;
         break;
       case Kind.OPERATION_DEFINITION:
       case Kind.INLINE_FRAGMENT:
@@ -323,6 +321,7 @@ export class TypeInfo {
         break;
       case Kind.ARGUMENT:
         this._argument = null;
+        this._fragmentArgument = null;
         this._defaultValueStack.pop();
         this._inputTypeStack.pop();
         break;
@@ -352,6 +351,27 @@ function getFieldDef(
   fieldNode: FieldNode,
 ) {
   return schema.getField(parentType, fieldNode.name.value);
+}
+
+function getFragmentSignatures(
+  schema: GraphQLSchema,
+  document: DocumentNode,
+): Map<string, FragmentSignature> {
+  const fragmentSignatures = new Map<string, FragmentSignature>();
+  for (const definition of document.definitions) {
+    if (definition.kind === Kind.FRAGMENT_DEFINITION) {
+      const variableSignatures = new Map<string, GraphQLVariableSignature>();
+      if (definition.variableDefinitions) {
+        for (const variableNode of definition.variableDefinitions) {
+          const signature = getVariableSignature(schema, variableNode);
+          variableSignatures.set(signature.name, signature);
+        }
+      }
+      const signature = { definition, variableSignatures };
+      fragmentSignatures.set(definition.name.value, signature);
+    }
+  }
+  return fragmentSignatures;
 }
 
 /**
