@@ -3,7 +3,7 @@ import type { Maybe } from '../../jsutils/Maybe.js';
 
 import { GraphQLError } from '../../error/GraphQLError.js';
 
-import type { ValueNode } from '../../language/ast.js';
+import type { ValueNode, VariableDefinitionNode } from '../../language/ast.js';
 import { Kind } from '../../language/kinds.js';
 import type { ASTVisitor } from '../../language/visitor.js';
 
@@ -11,6 +11,7 @@ import type { GraphQLType } from '../../type/definition.js';
 import { isNonNullType } from '../../type/definition.js';
 import type { GraphQLSchema } from '../../type/schema.js';
 
+import { getVariableSignature } from '../../utilities/getVariableSignature.js';
 import { isTypeSubTypeOf } from '../../utilities/typeComparators.js';
 
 import type { ValidationContext } from '../ValidationContext.js';
@@ -25,12 +26,14 @@ import type { ValidationContext } from '../ValidationContext.js';
 export function VariablesInAllowedPositionRule(
   context: ValidationContext,
 ): ASTVisitor {
+  let varDefMap: Map<string, VariableDefinitionNode>;
+
   return {
     OperationDefinition: {
+      enter() {
+        varDefMap = new Map();
+      },
       leave(operation) {
-        const operationSignature = context.getOperationSignature(operation);
-        const operationVariableSignatures =
-          operationSignature?.variableSignatures;
         const usages = context.getRecursiveVariableUsages(operation);
 
         for (const {
@@ -41,9 +44,13 @@ export function VariablesInAllowedPositionRule(
         } of usages) {
           const varName = node.name.value;
 
-          const signature =
-            fragmentVariableSignature ??
-            operationVariableSignatures?.get(varName);
+          let signature = fragmentVariableSignature;
+          if (!signature) {
+            const varDef = varDefMap.get(varName);
+            if (varDef) {
+              signature = getVariableSignature(context.getSchema(), varDef);
+            }
+          }
           if (signature && type) {
             // A var type is allowed if it is the same or more strict (e.g. is
             // a subtype of) than the expected type. It can be more strict if
@@ -74,6 +81,9 @@ export function VariablesInAllowedPositionRule(
           }
         }
       },
+    },
+    VariableDefinition(node) {
+      varDefMap.set(node.variable.name.value, node);
     },
   };
 }

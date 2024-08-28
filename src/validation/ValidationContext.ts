@@ -27,15 +27,8 @@ import type { GraphQLDirective } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
 import type { GraphQLVariableSignature } from '../utilities/getVariableSignature.js';
-import { getVariableSignature } from '../utilities/getVariableSignature.js';
 import type { FragmentSignature } from '../utilities/TypeInfo.js';
 import { TypeInfo, visitWithTypeInfo } from '../utilities/TypeInfo.js';
-
-// TODO: consider converting this interface to a type alias
-// export type OperationSignature = Map<string, GraphQLVariableSignature>;
-export interface OperationSignature {
-  variableSignatures: Map<string, GraphQLVariableSignature>;
-}
 
 type NodeWithSelectionSet = OperationDefinitionNode | FragmentDefinitionNode;
 interface VariableUsage {
@@ -174,11 +167,6 @@ export type SDLValidationRule = (context: SDLValidationContext) => ASTVisitor;
 export class ValidationContext extends ASTValidationContext {
   private _schema: GraphQLSchema;
   private _typeInfo: TypeInfo;
-  private _operationSignatures: Map<
-    OperationDefinitionNode,
-    OperationSignature
-  >;
-
   private _variableUsages: Map<
     NodeWithSelectionSet,
     ReadonlyArray<VariableUsage>
@@ -198,24 +186,6 @@ export class ValidationContext extends ASTValidationContext {
     super(ast, onError);
     this._schema = schema;
     this._typeInfo = typeInfo;
-
-    this._operationSignatures = new Map();
-    for (const definition of ast.definitions) {
-      if (definition.kind === Kind.OPERATION_DEFINITION) {
-        const variableSignatures = new Map<string, GraphQLVariableSignature>();
-        const variableDefinitions = definition.variableDefinitions;
-        if (variableDefinitions) {
-          for (const variableDefinition of variableDefinitions) {
-            variableSignatures.set(
-              variableDefinition.variable.name.value,
-              getVariableSignature(schema, variableDefinition),
-            );
-          }
-        }
-        this._operationSignatures.set(definition, { variableSignatures });
-      }
-    }
-
     this._variableUsages = new Map();
     this._recursiveVariableUsages = new Map();
   }
@@ -226,12 +196,6 @@ export class ValidationContext extends ASTValidationContext {
 
   getSchema(): GraphQLSchema {
     return this._schema;
-  }
-
-  getOperationSignature(
-    operation: OperationDefinitionNode,
-  ): Maybe<OperationSignature> {
-    return this._operationSignatures.get(operation);
   }
 
   getVariableUsages(node: NodeWithSelectionSet): ReadonlyArray<VariableUsage> {
