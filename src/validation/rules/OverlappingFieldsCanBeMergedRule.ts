@@ -4,8 +4,10 @@ import type { Maybe } from '../../jsutils/Maybe.js';
 import { GraphQLError } from '../../error/GraphQLError.js';
 
 import type {
+  ArgumentNode,
   DirectiveNode,
   FieldNode,
+  FragmentArgumentNode,
   FragmentDefinitionNode,
   FragmentSpreadNode,
   SelectionSetNode,
@@ -713,7 +715,7 @@ function sameArguments(
   }
 
   const values2 = new Map(args2.map(({ name, value }) => [name.value, value]));
-  return args1.every((arg1) => {
+  return (args1 as Array<FragmentArgumentNode | ArgumentNode>).every((arg1) => {
     const value1 = arg1.value;
     const value2 = values2.get(arg1.name.value);
     if (value2 === undefined) {
