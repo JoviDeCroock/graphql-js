@@ -184,36 +184,32 @@ export function experimentalGetArgumentValues(
     }
 
     const valueNode = argumentNode.value;
+    let isNull = valueNode.kind === Kind.NULL;
 
-    let hasValue = valueNode.kind !== Kind.NULL;
     if (valueNode.kind === Kind.VARIABLE) {
       const variableName = valueNode.name.value;
-      if (fragmentVariables?.signatures[variableName]) {
-        hasValue = fragmentVariables.values[variableName] != null;
-        if (!hasValue && argDef.defaultValue !== undefined) {
-          coercedValues[name] = argDef.defaultValue;
-          continue;
-        }
-      } else if (
-        variableValues != null &&
-        Object.hasOwn(variableValues, variableName)
+      const scopedVariableValues = fragmentVariables?.signatures[variableName]
+        ? fragmentVariables.values
+        : variableValues;
+      if (
+        scopedVariableValues == null ||
+        !Object.hasOwn(scopedVariableValues, variableName)
       ) {
-        hasValue = variableValues[variableName] != null;
-      } else if (argDef.defaultValue !== undefined) {
-        coercedValues[name] = argDef.defaultValue;
-        continue;
-      } else if (isNonNullType(argType)) {
-        throw new GraphQLError(
-          `Argument "${name}" of required type "${inspect(argType)}" ` +
-            `was provided the variable "$${variableName}" which was not provided a runtime value.`,
-          { nodes: valueNode },
-        );
-      } else {
+        if (argDef.defaultValue !== undefined) {
+          coercedValues[name] = argDef.defaultValue;
+        } else if (isNonNullType(argType)) {
+          throw new GraphQLError(
+            `Argument "${name}" of required type "${inspect(argType)}" ` +
+              `was provided the variable "$${variableName}" which was not provided a runtime value.`,
+            { nodes: valueNode },
+          );
+        }
         continue;
       }
+      isNull = scopedVariableValues[variableName] == null;
     }
 
-    if (!hasValue && isNonNullType(argType)) {
+    if (isNull && isNonNullType(argType)) {
       throw new GraphQLError(
         `Argument "${name}" of non-null type "${inspect(argType)}" ` +
           'must not be null.',

@@ -1335,6 +1335,22 @@ describe('Execute: Handles inputs', () => {
       });
     });
 
+    it('when a nullable argument without a field default is not provided and shadowed by an operation variable', () => {
+      const result = executeQueryWithFragmentArguments(`
+        query($x: String = "A") {
+          ...a
+        }
+        fragment a($x: String) on TestType {
+          fieldWithNullableStringInput(input: $x)
+        }
+      `);
+      expect(result).to.deep.equal({
+        data: {
+          fieldWithNullableStringInput: null,
+        },
+      });
+    });
+
     it('when a nullable argument with a field default is not provided and shadowed by an operation variable', () => {
       const result = executeQueryWithFragmentArguments(`
         query($x: String = "A") {
