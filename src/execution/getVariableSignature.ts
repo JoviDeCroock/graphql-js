@@ -1,17 +1,19 @@
 import { GraphQLError } from '../error/GraphQLError.js';
 
+import type { VariableDefinitionNode } from '../language/ast.js';
 import { print } from '../language/printer.js';
 
+import { isInputType } from '../type/definition.js';
 import type { GraphQLInputType, GraphQLSchema } from '../type/index.js';
-import { isInputType } from '../type/index.js';
 
-import type { VariableDefinitionNode } from '../index.js';
-
-import { typeFromAST } from './typeFromAST.js';
-import { valueFromAST } from './valueFromAST.js';
+import { typeFromAST } from '../utilities/typeFromAST.js';
+import { valueFromAST } from '../utilities/valueFromAST.js';
 
 /**
  * A GraphQLVariableSignature is required to coerce a variable value.
+ *
+ * Designed to have comparable interface to GraphQLArgument so that
+ * getArgumentValues() can be reused for fragment arguments.
  * */
 export interface GraphQLVariableSignature {
   name: string;

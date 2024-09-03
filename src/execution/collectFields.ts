@@ -22,9 +22,9 @@ import {
 } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
-import type { GraphQLVariableSignature } from '../utilities/getVariableSignature.js';
 import { typeFromAST } from '../utilities/typeFromAST.js';
 
+import type { GraphQLVariableSignature } from './getVariableSignature.js';
 import { experimentalGetArgumentValues, getDirectiveValues } from './values.js';
 
 export interface DeferUsage {

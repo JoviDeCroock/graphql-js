@@ -48,8 +48,6 @@ import { GraphQLStreamDirective } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 import { assertValidSchema } from '../type/validate.js';
 
-import { getVariableSignature } from '../utilities/getVariableSignature.js';
-
 import type { DeferUsageSet, ExecutionPlan } from './buildExecutionPlan.js';
 import { buildExecutionPlan } from './buildExecutionPlan.js';
 import type {
@@ -62,6 +60,7 @@ import {
   collectFields,
   collectSubfields as _collectSubfields,
 } from './collectFields.js';
+import { getVariableSignature } from './getVariableSignature.js';
 import { buildIncrementalResponse } from './IncrementalPublisher.js';
 import { mapAsyncIterable } from './mapAsyncIterable.js';
 import type {

@@ -20,11 +20,11 @@ import type { GraphQLDirective } from '../type/directives.js';
 import type { GraphQLSchema } from '../type/schema.js';
 
 import { coerceInputValue } from '../utilities/coerceInputValue.js';
-import type { GraphQLVariableSignature } from '../utilities/getVariableSignature.js';
-import { getVariableSignature } from '../utilities/getVariableSignature.js';
 import { valueFromAST } from '../utilities/valueFromAST.js';
 
 import type { FragmentVariables } from './collectFields.js';
+import type { GraphQLVariableSignature } from './getVariableSignature.js';
+import { getVariableSignature } from './getVariableSignature.js';
 
 type CoercedVariableValues =
   | { errors: ReadonlyArray<GraphQLError>; coerced?: never }
