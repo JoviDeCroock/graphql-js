@@ -292,6 +292,12 @@ export class ValidationContext extends ASTValidationContext {
     return this._typeInfo.getFragmentSignature();
   }
 
+  getFragmentSignatureByName(): (
+    fragmentName: string,
+  ) => Maybe<FragmentSignature> {
+    return this._typeInfo.getFragmentSignatureByName();
+  }
+
   getEnumValue(): Maybe<GraphQLEnumValue> {
     return this._typeInfo.getEnumValue();
   }
